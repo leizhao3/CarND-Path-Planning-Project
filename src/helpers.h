@@ -39,7 +39,12 @@ double distance(double x1, double y1, double x2, double y2) {
   return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
-// Calculate closest waypoint to current x, y position
+/**
+ * Calculate closest waypoint to current x, y position
+ * @param x, @param y 
+ * @param maps_x, @param maps_y
+ * @return 
+ */
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x, 
                     const vector<double> &maps_y) {
   double closestLen = 100000; //large number
@@ -58,7 +63,15 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
   return closestWaypoint;
 }
 
-// Returns next waypoint of the closest waypoint
+/**
+ * Returns next waypoint of the closest waypoint. For example, if there is closest
+ * waypoint right behind you, you don't want to go to that waypoint. Instead, you
+ * go to NextWaypoint farther out.
+ * @param x, @param y 
+ * @param theta 
+ * @param maps_x, @param maps_y
+ * @return 
+ */
 int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, 
                  const vector<double> &maps_y) {
   int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
@@ -71,7 +84,7 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
   double angle = fabs(theta-heading);
   angle = std::min(2*pi() - angle, angle);
 
-  if (angle > pi()/2) {
+  if (angle > pi()/2) { //pi()/2 is used because that is where the car is looking (ahead of car)
     ++closestWaypoint;
     if (closestWaypoint == maps_x.size()) {
       closestWaypoint = 0;
@@ -81,7 +94,13 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
   return closestWaypoint;
 }
 
-// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
+/**
+ * Transform from Cartesian x,y coordinates to Frenet s,d coordinates
+ * @param x, @param y 
+ * @param theta 
+ * @param maps_x, @param maps_y
+ * @return 
+ */
 vector<double> getFrenet(double x, double y, double theta, 
                          const vector<double> &maps_x, 
                          const vector<double> &maps_y) {
@@ -126,7 +145,13 @@ vector<double> getFrenet(double x, double y, double theta,
   return {frenet_s,frenet_d};
 }
 
-// Transform from Frenet s,d coordinates to Cartesian x,y
+/**
+ * Transform from Frenet s,d coordinates to Cartesian x,y
+ * @param s, @param d 
+ * @param maps_s
+ * @param maps_x, @param maps_y
+ * @return 
+ */
 vector<double> getXY(double s, double d, const vector<double> &maps_s, 
                      const vector<double> &maps_x, 
                      const vector<double> &maps_y) {
@@ -153,5 +178,45 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 
   return {x,y};
 }
+
+
+/**
+ * convert MAP coord to vehicle coord
+ * @param 
+ * @return 
+ */
+void map2car(
+  vector<double> &coord_map_x, vector<double> &coord_map_y,
+  double ref_x, double ref_y, double ref_yaw) {
+    for(int i=0; i<coord_map_x.size(); i++) {
+      double shift_x = coord_map_x[i] - ref_x;
+      double shift_y = coord_map_y[i] - ref_y;
+
+      coord_map_x[i] =   shift_x*cos(ref_yaw) + shift_y*sin(ref_yaw);
+      coord_map_y[i] = - shift_x*sin(ref_yaw) + shift_y*cos(ref_yaw);
+
+    }
+  }
+
+
+
+/**
+ * convert car coord to MAP coord
+ * @param 
+ * @return 
+ */
+void car2map(
+  vector<double> &coord_car_x, vector<double> &coord_car_y,
+  double ref_x, double ref_y, double ref_yaw) {
+    for(int i=0; i<coord_car_x.size(); i++) {
+      double x_point = ref_x + coord_car_x[i]*cos(ref_yaw) - coord_car_y[i]*sin(ref_yaw);
+      double y_point = ref_y + coord_car_x[i]*sin(ref_yaw) + coord_car_y[i]*cos(ref_yaw);
+
+      coord_car_x[i] = x_point;
+      coord_car_y[i] = y_point;
+
+
+    }
+  }
 
 #endif  // HELPERS_H
