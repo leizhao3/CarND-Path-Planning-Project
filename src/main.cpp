@@ -8,11 +8,16 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
+#include <iomanip>
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
+using std::cout;
+using std::endl;
+using std::setw;
+
 
 // maximum acceleration: 10 [m/s^2]
 // maximum jerk: 10 [m/s^3]
@@ -33,6 +38,8 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
+  double max_accel = 10; //[m/s^2], the maximum acceleration
+  double max_jerk = 10; //[m/s^3], the maximum jerk
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -56,10 +63,20 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
+  // Create variable for the lane & velocity
+  int lane = 1; //start out at the center lane. lane[LEFT,MID,RIGHT] = [0,1,2]
+  double ref_vel = 0; // [mph]. 
+  double target_vel = 49.5; // [mph]. The initial target speed is set slightly below speed limit.
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy, 
+               &lane,&ref_vel,&target_vel]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
+
+    double lane_width = 4; //[meter]
+    double lane_center_d = 2 + 4*lane;
+    
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -73,9 +90,6 @@ int main() {
         string event = j[0].get<string>();
         
         if (event == "telemetry") {
-          // Create variable for the lane & velocity
-          int lane = 1; //start out at the center lane. lane[LEFT,MID,RIGHT] = [0,1,2]
-          double ref_vel = 49.5; // [mph]. The max speed the vehicle would go to. Speed Limit = 50.
 
           // j[1] is the data JSON object
           
@@ -97,7 +111,6 @@ int main() {
           double end_path_s = j[1]["end_path_s"]; //The previous list's last point's frenet s value
           double end_path_d = j[1]["end_path_d"]; //The previous list's last point's frenet d value
 
-
           /**
            * Sensor Fusion Data, a 2d vector of all other cars on the same side 
            * of the road.Accessed via [ID][@param]
@@ -111,15 +124,48 @@ int main() {
            */
           vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
 
-            
+          bool too_close = false;
+          double deceleration_dist; //the distance to decelerate
 
-          json msgJson;
+          //find ref_v to use
+          for(int i=0; i<sensor_fusion.size(); i++) {
+            //find the car in my lane
+            float check_d = sensor_fusion[i][6];
+            if(check_d<(lane_center_d+2) && (check_d>(lane_center_d-2))) {
+              double check_vx = sensor_fusion[i][3];
+              double check_vy = sensor_fusion[i][4];
+              double check_speed = sqrt(check_vx*check_vx + check_vy*check_vy);
+              double check_s = sensor_fusion[i][5];
+              double s_gap = check_s - car_s; //the gap between ego car to check car
+
+              if((check_s>car_s) && (s_gap<50)) {
+
+                too_close = true;
+                target_vel = check_speed; //set the target velocity to the vehicle in front of us
+                deceleration_dist = s_gap - 30; 
+
+              }
+            }
+          }
+
+          if(too_close) {
+            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/deceleration_dist; //get to the target velocity in 15 meter.
+            ref_vel -= deceleration * 0.02;
+
+            if(deceleration_dist<0) {
+              cout << "deceleration_dist<0, larger deceleration is needed" << endl;
+            }
+          } else if (ref_vel < 49.5) {
+            ref_vel += .224;
+          }
 
 
-          /*-----Use points in previous path to generate smoother path------*/
+          /*---------------Use points in previous path to generate smoother path---------------*/
           /**define a path made up of (x,y) points that the car will visit
            * sequentially every .02 seconds
            * Method: 
+           * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
+           * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
            */
 
           vector<double> spline_x; //point x for spline generation
@@ -158,9 +204,9 @@ int main() {
           spline_y.push_back(ref_y);
 
           //In Frenet add evenly 30m space point ahead of the car reference
-          vector<double> next_wp0 = getXY(car_s+30,(2+4*lane),map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60,(2+4*lane),map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90,(2+4*lane),map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp0 = getXY(car_s+30,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp1 = getXY(car_s+60,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(car_s+90,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           spline_x.push_back(next_wp0[0]);
           spline_x.push_back(next_wp1[0]);
@@ -181,7 +227,10 @@ int main() {
           double target_y = traj(target_x);
           double target_dist = sqrt(target_x*target_x+target_y*target_y);
           int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
-          double N = target_dist/(0.02*ref_vel/2.24);//Number of point within target_x
+          double N = target_dist/(0.02*ref_vel/2.24);
+            //Number of point within target_x.
+            //0.02 is from the car updates every 0.02 second
+            //2.24 convert MPH to m/s
           double x_add_on = target_x/N; //evenly spacing within target_x
 
           vector<double> next_path_x;
@@ -223,19 +272,7 @@ int main() {
             next_y_vals.push_back(next_path_y[i]);
           }
           
-          
-
-
-
-
-
-
-
-
-
-
-
-
+          json msgJson;
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
