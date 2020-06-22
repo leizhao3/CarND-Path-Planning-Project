@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string>
 #include <vector>
+#include "spline.h"
 
 // for convenience
 using std::string;
@@ -196,6 +197,7 @@ void map2car(
       coord_map_y[i] = - shift_x*sin(ref_yaw) + shift_y*cos(ref_yaw);
 
     }
+    return;
   }
 
 
@@ -217,6 +219,120 @@ void car2map(
 
 
     }
+    return;
   }
+
+/**define a path made up of (x,y) points that the car will visit
+ * sequentially every .02 seconds
+ * Method: 
+ * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
+ * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
+ */
+void generate_traj(vector<double> &next_path_x_ref, vector<double> &next_path_y_ref, 
+  vector<double> &previous_path_x, vector<double> &previous_path_y, double car_x, double car_y, double car_yaw, double car_s, double ref_vel, 
+  int target_lane, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y) {
+
+  vector<double> spline_x; //point x for spline generation
+  vector<double> spline_y; //point x for spline generation
+
+  double ref_x, ref_y, ref_yaw;
+  double ref_x_prev, ref_y_prev;
+
+  int prev_size = previous_path_x.size();
+
+  //if previous size is almost empty, use the car as starting reference
+  if(prev_size < 2) {
+    ref_x = car_x; 
+    ref_y = car_y;
+    ref_yaw = deg2rad(car_yaw);
+
+    //use two points that make the path tangent to the car. dist=1
+    ref_x_prev = car_x - cos(car_yaw); 
+    ref_y_prev = car_y - sin(car_yaw); 
+
+  } else {
+    //use last two points from previous path to create future path
+    ref_x = previous_path_x[prev_size-1];
+    ref_y = previous_path_y[prev_size-1];
+
+    ref_x_prev = previous_path_x[prev_size-2];
+    ref_y_prev = previous_path_y[prev_size-2];
+    ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
+
+  }
+
+  spline_x.push_back(ref_x_prev);
+  spline_x.push_back(ref_x);
+
+  spline_y.push_back(ref_y_prev);
+  spline_y.push_back(ref_y);
+
+  //In Frenet add evenly 30m space point ahead of the car reference
+  vector<double> next_wp0 = getXY(car_s+30,2+4*target_lane,maps_s, maps_x, maps_y);
+  vector<double> next_wp1 = getXY(car_s+60,2+4*target_lane,maps_s, maps_x, maps_y);
+  vector<double> next_wp2 = getXY(car_s+90,2+4*target_lane,maps_s, maps_x, maps_y);
+
+  spline_x.push_back(next_wp0[0]);
+  spline_x.push_back(next_wp1[0]);
+  spline_x.push_back(next_wp2[0]);
+
+  spline_y.push_back(next_wp0[1]);
+  spline_y.push_back(next_wp1[1]);
+  spline_y.push_back(next_wp2[1]);
+
+  // convert map coordiante to vehicle coordinate
+  map2car(spline_x, spline_y, ref_x, ref_y, ref_yaw);
+
+  // create a spline
+  tk::spline traj;
+  traj.set_points(spline_x, spline_y);
+  
+  double target_x = 30.0;
+  double target_y = traj(target_x);
+  double target_dist = sqrt(target_x*target_x+target_y*target_y);
+  int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
+  double N = target_dist/(0.02*ref_vel/2.24);
+    //Number of point within target_x.
+    //0.02 is from the car updates every 0.02 second
+    //2.24 convert MPH to m/s
+  double x_add_on = target_x/N; //evenly spacing within target_x
+
+  double x_point, y_point;
+  x_point = 0;
+  
+  for(int i=0; i<next_size; i++) {
+    x_point += x_add_on;
+    y_point = traj(x_point);
+
+    next_path_x_ref.push_back(x_point);
+    next_path_y_ref.push_back(y_point);
+
+  }
+
+  // convert CAR coordiante to MAP coordinate
+  car2map(next_path_x_ref, next_path_y_ref, ref_x, ref_y, ref_yaw);
+
+  return;
+}
+
+
+//find all potential lane
+vector<int> find_lane(int lane) {
+    vector<int> potential_lane;
+
+    if(lane == 0) {
+        potential_lane.push_back(lane+1);
+    } 
+    else if (lane == 1) {
+        potential_lane.push_back(lane-1);
+        potential_lane.push_back(lane+1);
+    } 
+    else if (lane == 2) {
+        potential_lane.push_back(lane-1);
+    }
+    potential_lane.push_back(lane);
+
+    return potential_lane;
+}
 
 #endif  // HELPERS_H

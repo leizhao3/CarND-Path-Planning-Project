@@ -6,6 +6,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
+#include "cost_functions.h"
 #include "json.hpp"
 #include "spline.h"
 #include <iomanip>
@@ -104,8 +105,8 @@ int main() {
           // Previous path data given to the Planner. Return the previous list but with 
           // PROCESSED POINTS REMOVED, to show how far along the path has processed
           // since last time.
-          auto previous_path_x = j[1]["previous_path_x"];
-          auto previous_path_y = j[1]["previous_path_y"];
+          vector<double> previous_path_x = j[1]["previous_path_x"];
+          vector<double> previous_path_y = j[1]["previous_path_y"];
 
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"]; //The previous list's last point's frenet s value
@@ -168,13 +169,58 @@ int main() {
            * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
            */
 
+          int prev_size = previous_path_x.size();
+          int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
+
+          vector<double> next_path_x;
+          vector<double> next_path_y;
+
+
+          /*
+          generate_traj(next_path_x, next_path_y,
+                    previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
+                    lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);*/
+
+          if(ref_vel < 42) {
+                vector<double> next_path_x_ref;
+                vector<double> next_path_y_ref;
+                double cost_min = 1000;
+
+                vector<int> potential_lane;
+                potential_lane = find_lane(lane);
+
+                for(int i=0; i<potential_lane.size(); i++) {
+                    generate_traj(next_path_x_ref, next_path_y_ref,
+                        previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
+                        potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
+                    
+                    double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
+
+                    //find the min cost trajectory
+                    if(cost < cost_min) {
+                        cost_min = cost;
+
+                        next_path_x = next_path_x_ref;
+                        next_path_y = next_path_y_ref;
+                    }
+                }
+            } else {
+                generate_traj(next_path_x, next_path_y,
+                    previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
+                    lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            }
+        
+
+          
+          
+
+          /*
           vector<double> spline_x; //point x for spline generation
           vector<double> spline_y; //point x for spline generation
 
           double ref_x, ref_y, ref_yaw;
           double ref_x_prev, ref_y_prev;
 
-          int prev_size = previous_path_x.size();
 
           //if previous size is almost empty, use the car as starting reference
           if(prev_size < 2) {
@@ -250,6 +296,7 @@ int main() {
 
           // convert CAR coordiante to MAP coordinate
           car2map(next_path_x, next_path_y, ref_x, ref_y, ref_yaw);
+          */
 
 
 

@@ -772,6 +772,18 @@ lapacke_mangling.h
 
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/Eigen-3.3/Eigen/src/plugins/MatrixCwiseUnaryOps.h
 
+/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/cost_functions.h
+math.h
+-
+string
+-
+vector
+-
+spline.h
+/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/spline.h
+helpers.h
+/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/helpers.h
+
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/helpers.h
 math.h
 -
@@ -779,6 +791,8 @@ string
 -
 vector
 -
+spline.h
+/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/spline.h
 
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/json.hpp
 algorithm
@@ -853,6 +867,8 @@ Eigen-3.3/Eigen/QR
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/Eigen-3.3/Eigen/QR
 helpers.h
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/helpers.h
+cost_functions.h
+/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/cost_functions.h
 json.hpp
 /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/json.hpp
 spline.h
