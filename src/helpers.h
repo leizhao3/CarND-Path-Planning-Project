@@ -335,4 +335,14 @@ vector<int> find_lane(int lane) {
     return potential_lane;
 }
 
+/**
+ * A function that returns a value between 0 and 1 for x in the 
+    range [0, infinity] and -1 to 1 for x in the range [-infinity, infinity].
+
+    Useful for cost functions.
+ */
+double logistic(double x) {
+  return 2.0 / (1 + exp(-x)) - 1.0;
+}
+
 #endif  // HELPERS_H

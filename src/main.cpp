@@ -181,34 +181,35 @@ int main() {
                     previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                     lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);*/
 
-          if(ref_vel < 42) {
-                vector<double> next_path_x_ref;
-                vector<double> next_path_y_ref;
-                double cost_min = 1000;
+          if((ref_vel < 42) && too_close) {
+            cout << "doing path planning......." << endl;
+            vector<double> next_path_x_ref;
+            vector<double> next_path_y_ref;
+            double cost_min = 10000;
 
-                vector<int> potential_lane;
-                potential_lane = find_lane(lane);
+            vector<int> potential_lane;
+            potential_lane = find_lane(lane);
 
-                for(int i=0; i<potential_lane.size(); i++) {
-                    generate_traj(next_path_x_ref, next_path_y_ref,
-                        previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
-                        potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
-                    
-                    double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
+            for(int i=0; i<potential_lane.size(); i++) {
+              generate_traj(next_path_x_ref, next_path_y_ref,
+                  previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
+                  potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
+              
+              double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
 
-                    //find the min cost trajectory
-                    if(cost < cost_min) {
-                        cost_min = cost;
-
-                        next_path_x = next_path_x_ref;
-                        next_path_y = next_path_y_ref;
-                    }
-                }
-            } else {
-                generate_traj(next_path_x, next_path_y,
-                    previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
-                    lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+              //find the min cost trajectory
+              if(cost < cost_min) {
+                
+                cost_min = cost;
+                next_path_x = next_path_x_ref;
+                next_path_y = next_path_y_ref;
+              }
             }
+          } else {
+            generate_traj(next_path_x, next_path_y,
+                previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
+                lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          }
         
 
           

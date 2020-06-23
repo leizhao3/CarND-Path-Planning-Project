@@ -21,17 +21,18 @@ double EXPECTED_JERK_IN_ONE_SEC = 2; //[m/s^2]
 double EXPECTED_ACC_IN_ONE_SEC = 1; //[m/s]
 
 //WEIGHTED_COST_FUNCTIONS
-vector<double> WEIGHTED_COST_FUNCTIONS = {
-    1, //time_diff_cost
-    10000, //max_jerk_cost
-    1000, //total_jerk_cost
-    10000, //collision_cost
-    10, //buffer_cost
-    10000, //max_accel_cost
-    10000, //max_accel_cost_d
-    50, //total_accel_cost
-    1000 //total_accel_cost_d
+struct WEIGHTED_COST_FUNCTIONS {
+    double time_diff_cost = 1;
+    double max_jerk_cost = 10000;
+    double total_jerk_cost = 1000;
+    double collision_cost = 10000;
+    double buffer_cost = 10;
+    double max_accel_cost = 10000;
+    double max_accel_cost_d = 10000;
+    double total_accel_cost = 50;
+    double total_accel_cost_d = 1000;
 };
+
 
 
 /**
@@ -82,15 +83,19 @@ double time_diff_cost() {
     return cost;
 }
 
+double max_jerk_cost() {
+    double cost = 0.2;
+    return cost;
+}
+
 double calculate_cost(vector<double> &next_path_x, vector<double> &next_path_y) {
     
     double cost = 0.0;
+    WEIGHTED_COST_FUNCTIONS Weight;
 
-    for(int i=0; i<WEIGHTED_COST_FUNCTIONS.size(); i++) {
-        if(i==0) {
-            cost += WEIGHTED_COST_FUNCTIONS[i]*time_diff_cost();
-        }
-    }
+    cost += Weight.time_diff_cost * time_diff_cost();
+    cost += Weight.max_jerk_cost * max_jerk_cost();
+
 
     return cost;
 }
