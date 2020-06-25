@@ -153,5 +153,13 @@ still be compilable with cmake and make./
 * when the front vehicle's speed is < 45 MPH + when it is safe to make lane change
 * change the lane
 
+## Mac Trouble Shooting
+### Error: 
+Could NOT find OpenSSL, try to set the path to OpenSSL root folder in the
+system variable OPENSSL_ROOT_DIR (missing: OPENSSL_INCLUDE_DIR)
+#### Solution: In Terminal
+brew install pkg-config
+./install-mac.sh
+
 
 

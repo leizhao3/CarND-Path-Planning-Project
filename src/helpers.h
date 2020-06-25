@@ -9,6 +9,8 @@
 // for convenience
 using std::string;
 using std::vector;
+using std::cout;
+using std::endl;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -222,13 +224,15 @@ void car2map(
     return;
   }
 
-/**define a path made up of (x,y) points that the car will visit
+/**
+ * define a path made up of (x,y) points that the car will visit
  * sequentially every .02 seconds
  * Method: 
  * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
  * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
+ * @return next_path_x_ref & next_path_y_ref in MAP coordinate
  */
-void generate_traj(vector<double> &next_path_x_ref, vector<double> &next_path_y_ref, 
+void generateTraj(vector<double> &next_path_x_ref, vector<double> &next_path_y_ref, 
   vector<double> &previous_path_x, vector<double> &previous_path_y, double car_x, double car_y, double car_yaw, double car_s, double ref_vel, 
   int target_lane, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y) {
 
@@ -290,7 +294,6 @@ void generate_traj(vector<double> &next_path_x_ref, vector<double> &next_path_y_
   double target_x = 30.0;
   double target_y = traj(target_x);
   double target_dist = sqrt(target_x*target_x+target_y*target_y);
-  int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
   double N = target_dist/(0.02*ref_vel/2.24);
     //Number of point within target_x.
     //0.02 is from the car updates every 0.02 second
@@ -299,6 +302,9 @@ void generate_traj(vector<double> &next_path_x_ref, vector<double> &next_path_y_
 
   double x_point, y_point;
   x_point = 0;
+
+  int next_size = 50 - prev_size; 
+    //How many point we want to generate in next path beside the point in previous path
   
   for(int i=0; i<next_size; i++) {
     x_point += x_add_on;
@@ -317,7 +323,7 @@ void generate_traj(vector<double> &next_path_x_ref, vector<double> &next_path_y_
 
 
 //find all potential lane
-vector<int> find_lane(int lane) {
+vector<int> findLane(int lane) {
     vector<int> potential_lane;
 
     if(lane == 0) {
@@ -336,13 +342,139 @@ vector<int> find_lane(int lane) {
 }
 
 /**
- * A function that returns a value between 0 and 1 for x in the 
-    range [0, infinity] and -1 to 1 for x in the range [-infinity, infinity].
+ * A function that returns a value between 0 and 1 for x in the range [0, infinity] and 
+ *                                        -1 to 1 for x in the range [-infinity, infinity].
 
     Useful for cost functions.
  */
 double logistic(double x) {
   return 2.0 / (1 + exp(-x)) - 1.0;
 }
+
+/**
+ * Prediction other vehicles [s, s_dot, s_double_dot, d, d_dot, d_double_dot] based on sensor fusion data.
+ * Assumption:
+ *    s_double_dot = 0
+ *    d_dot = 0
+ *    d_double_dot = 0
+ * @param sensor_fusion Sensor Fusion Data, a 2d vector of all other cars on the same side of the road.
+ *                      Accessed via [ID][@param]
+  * @param ID car's unique ID
+  * @param x [meter] car's x position in map coordinates
+  * @param y [meter] car's y position in map coordinates
+  * @param vx [m/s] car's x velocity
+  * @param vy [m/s] car's y velocity
+  * @param s [meter] car's s position in frenet coordinates
+  * @param d [meter] car's d position in frenet coordinates. 
+ * @return [ID][s, s_dot, s_double_dot, d, d_dot, d_double_dot]
+       
+ */
+vector<vector<double>> predictionCars(vector<vector<double>> sensor_fusion) {
+  vector<vector<double>> prediction;
+
+  for(int i=0; i<sensor_fusion.size(); i++) {
+    
+    double s = sensor_fusion[i][4];
+    double vx = sensor_fusion[i][2];
+    double vy = sensor_fusion[i][3];
+    double s_dot = sqrt(vx*vx + vy*vy);
+    double s_double_dot = 0;
+
+    double d = sensor_fusion[i][5];
+    double d_dot = 0;
+    double d_double_dot = 0;
+    
+
+
+
+    prediction.push_back({s,s_dot,s_double_dot, d,d_dot,d_double_dot});
+    
+  }
+
+  return prediction;
+}
+
+
+/**
+  * @param ID car's unique ID
+  * @param x [meter] car's x position in map coordinates
+  * @param y [meter] car's y position in map coordinates
+  * @param vx [m/s] car's x velocity
+  * @param vy [m/s] car's y velocity
+  * @param s [meter] car's s position in frenet coordinates
+  * @param d [meter] car's d position in frenet coordinates. 
+ */
+double nearestDist2SingleCar(
+  vector<double> &next_path_x, vector<double> &next_path_y, 
+  vector<double> &sensor_fusion_single, double ref_vel) {
+    
+    double closest = 999999;
+
+    double x = sensor_fusion_single[1];
+    double x_dot = sensor_fusion_single[3];
+    double x_double_dot = 0;
+
+    double y = sensor_fusion_single[2];
+    double y_dot = sensor_fusion_single[4];
+    double y_double_dot = 0;
+
+    for(int i=0; i<(next_path_x.size()-1); i++) {
+      double dist = distance(next_path_x[i], next_path_y[i],next_path_x[i+1], next_path_y[i+1]);
+        //get distance from the the current point of analysis to the next point of analysis in next_path.
+      double dT = dist/(ref_vel/2.24); 
+        //the time needed for ego vehicle to get to the next point
+        //ref_vel/2.24 convert MPH to m/s
+      x += x_dot*dT + x_double_dot*dT*dT;
+      y += y_dot*dT + y_double_dot*dT*dT;
+      double dist2ego = distance(x, y, next_path_x[i], next_path_y[i]);
+
+      if(dist2ego < closest) {
+        closest = dist2ego;
+        //cout << "Getting closer distance " << endl;
+        //cout << "dT = " << dT << endl;
+        //cout << "x\ty\tnext_path_x[i]\tnext_path_y[i]" << endl;
+        //cout << x << "\t" << y << "\t" << next_path_x[i] << "\t" << next_path_y[i] << endl;
+      }
+      
+    }
+
+    return closest;
+
+}
+
+
+/**
+ * Calculates the closest distance to any vehicle during a trajectory.
+ * 
+* Sensor Fusion Data, a 2d vector of all other cars on the same side 
+* of the road.Accessed via [ID][@param]
+* @param ID car's unique ID
+* @param x [meter] car's x position in map coordinates
+* @param y [meter] car's y position in map coordinates
+* @param vx [m/s] car's x velocity
+* @param vy [m/s] car's y velocity
+* @param s [meter] car's s position in frenet coordinates
+* @param d [meter] car's d position in frenet coordinates. 
+           
+ */
+double nearestDist2Cars(
+  vector<double> &next_path_x, vector<double> &next_path_y, 
+  vector<vector<double>> &sensor_fusion, double ref_vel) {
+    
+    double closest = 999999;
+    for(int i=0; i<sensor_fusion.size(); i++) {
+      double dist = nearestDist2SingleCar(next_path_x, next_path_y, sensor_fusion[i], ref_vel);
+      //cout << "Vehicle ID = " << i << endl;
+      //cout << "dist = " << dist << endl;
+
+      if(dist<closest) {
+        closest = dist;
+      }
+    }
+    return closest;
+    
+  }
+
+
 
 #endif  // HELPERS_H

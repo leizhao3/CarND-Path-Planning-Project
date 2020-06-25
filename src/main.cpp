@@ -20,11 +20,6 @@ using std::endl;
 using std::setw;
 
 
-// maximum acceleration: 10 [m/s^2]
-// maximum jerk: 10 [m/s^3]
-// maximum lane change time: 3 [s]
-// speed limit: 50 [MPH] or 22.352 [meter/s]
-
 int main() {
   uWS::Hub h;
 
@@ -125,6 +120,43 @@ int main() {
            */
           vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
 
+          
+          int width = 10;
+
+          /*
+          cout << "Print out ego car ......................." << endl;
+          cout << setw(width) <<"ego car"
+               << setw(width) <<"car_x"
+               << setw(width) <<"car_y"
+               << setw(width) <<"car_s"
+               << setw(width) <<"car_d"
+               << setw(width) <<"car_yaw"
+               << setw(width) <<"car_speed" << endl;
+          cout << setw(width) <<"ego car"
+               << setw(width) <<car_x
+               << setw(width) <<car_y
+               << setw(width) <<car_s
+               << setw(width) <<car_d
+               << setw(width) <<car_yaw
+               << setw(width) <<car_speed << endl;
+
+          cout << "Print out sensor fusion ......................." << endl;
+          cout << setw(width) <<"i"
+               << setw(width) <<"ID"
+               << setw(width) <<"x"
+               << setw(width) <<"y"
+               << setw(width) <<"vx"
+               << setw(width) <<"vy"
+               << setw(width) <<"s"
+               << setw(width) <<"d" << endl;
+          for(int i=0; i<sensor_fusion.size(); i++) {
+            cout << setw(width) << i;
+            for(int j=0; j<sensor_fusion[i].size(); j++) {
+              cout << setw(width) << sensor_fusion[i][j];
+            }
+            cout << endl;
+          }*/
+
           bool too_close = false;
           double deceleration_dist; //the distance to decelerate
 
@@ -150,7 +182,8 @@ int main() {
           }
 
           if(too_close) {
-            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/deceleration_dist; //get to the target velocity in 15 meter.
+            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/deceleration_dist; 
+              //get to the target velocity in 15 meter.
             ref_vel -= deceleration * 0.02;
 
             if(deceleration_dist<0) {
@@ -169,51 +202,73 @@ int main() {
            * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
            */
 
-          int prev_size = previous_path_x.size();
-          int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
-
+        
           vector<double> next_path_x;
           vector<double> next_path_y;
 
 
           /*
-          generate_traj(next_path_x, next_path_y,
+          generateTraj(next_path_x, next_path_y,
                     previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                     lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);*/
 
-          if((ref_vel < 42) && too_close) {
+          if(too_close) {
+          //if(true) { //for debug
             cout << "doing path planning......." << endl;
-            vector<double> next_path_x_ref;
-            vector<double> next_path_y_ref;
             double cost_min = 10000;
 
             vector<int> potential_lane;
-            potential_lane = find_lane(lane);
+            potential_lane = findLane(lane);
 
             for(int i=0; i<potential_lane.size(); i++) {
-              generate_traj(next_path_x_ref, next_path_y_ref,
+              cout << "--------------------------------------------------" << endl;
+              cout << "current @ lane " << lane << endl;
+              cout << "analyize potential_lane " << potential_lane[i] << endl;
+
+              vector<double> next_path_x_ref;
+              vector<double> next_path_y_ref;
+
+              generateTraj(next_path_x_ref, next_path_y_ref,
                   previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                   potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
               
-              double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
+              //double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
+              CalculateCost cost;
+              cost.init(next_path_x_ref, next_path_y_ref, ref_vel, sensor_fusion, lane, potential_lane[i]);
 
               //find the min cost trajectory
-              if(cost < cost_min) {
+              double cost_temp = cost.calculateCost(1);
+              cout << "cost_temp = " << cost_temp << endl;
+              if(cost_temp < cost_min) {
+                cout << "\n\nget smaller cost " << cost_temp << endl;
+                cout << "current @ lane " << lane << endl;
+                cout << "going to @ lane " << potential_lane[i] << endl;
                 
-                cost_min = cost;
+                cost_min = cost_temp;
+
+                //re-initialize the variable
+                //vector<double> next_path_x;
+                //vector<double> next_path_y;
+
                 next_path_x = next_path_x_ref;
                 next_path_y = next_path_y_ref;
+                
               }
             }
           } else {
-            generate_traj(next_path_x, next_path_y,
+            generateTraj(next_path_x, next_path_y,
                 previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                 lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
           }
-        
 
-          
-          
+          /*
+          cout << "next_path_x.size() = " << next_path_x.size() << endl;
+          cout << "next_path_y.size() = " << next_path_y.size() << endl;
+          cout << setw(width) << "x" << setw(width) << "y" << endl;
+          for(int i=0; i<next_path_x.size(); i++) {
+            cout << setw(width) << next_path_x[i] << setw(width) << next_path_y[i] << endl;
+          }*/
+
 
           /*
           vector<double> spline_x; //point x for spline generation
@@ -300,25 +355,32 @@ int main() {
           */
 
 
-
-
+         int prev_size = previous_path_x.size();
+         //cout << "prev_size = " << prev_size << endl;
+         int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
 
 
           // define the actual (x,y) points used for the planner
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
+
           // attach previous path points
           for(int i=0; i<prev_size; i++) {
             next_x_vals.push_back(previous_path_x[i]);
             next_y_vals.push_back(previous_path_y[i]);
+            //cout << setw(width) << next_x_vals[i] << setw(width) << next_y_vals[i] << endl;
           }
 
           // attach next path points
+          //cout << "attach the next path" << endl;
           for(int i=0; i<next_size; i++) {
             next_x_vals.push_back(next_path_x[i]);
             next_y_vals.push_back(next_path_y[i]);
+            //cout << setw(width) << next_x_vals[i+prev_size] << setw(width) << next_y_vals[i+prev_size] << endl;
           }
+
+
           
           json msgJson;
 
