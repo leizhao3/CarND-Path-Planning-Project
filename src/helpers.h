@@ -233,7 +233,8 @@ void car2map(
  * @return next_path_x_ref & next_path_y_ref in MAP coordinate
  */
 void generateTraj(vector<double> &next_path_x_ref, vector<double> &next_path_y_ref, 
-  vector<double> &previous_path_x, vector<double> &previous_path_y, double car_x, double car_y, double car_yaw, double car_s, double ref_vel, 
+  vector<double> &previous_path_x, vector<double> &previous_path_y, 
+  double car_x, double car_y, double car_yaw, double car_s, double ref_vel, 
   int target_lane, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y) {
 
   vector<double> spline_x; //point x for spline generation
@@ -474,6 +475,33 @@ double nearestDist2Cars(
     return closest;
     
   }
+
+
+struct Vehicle {
+  double car_x_; //[meter] The car's x position in MAP coordinates
+  double car_y_; //[meter] The car's y position in MAP coordinates
+  double car_s_; //[meter] The car's s position in frenet coordinates
+  double car_d_; //[meter] The car's d position in frenet coordinates
+  double car_yaw_; //[deg] The car's yaw angle in the map
+  double car_speed_; //[MPH] The car's speed
+  int lane_; //current lane 
+  double ref_vel_; //reference velocity for planning
+  string state_; //current state of the car
+};
+
+
+struct Trajectory {
+  vector<double> x_;
+  vector<double> y_;
+};
+
+struct MapWaypoints {
+  vector<double> x_;
+  vector<double> y_;
+  vector<double> s_;
+  vector<double> dx_;
+  vector<double> dy_;
+};
 
 
 

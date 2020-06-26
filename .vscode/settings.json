@@ -74,7 +74,9 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "__functional_03": "cpp"
+        "__functional_03": "cpp",
+        "__tree": "cpp",
+        "__split_buffer": "cpp"
     },
     "python.pythonPath": "/Users/Lei/opt/anaconda3/envs/carnd-term1/bin/python"
 }

@@ -3,13 +3,17 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <iomanip>
+#include <cmath>
+#include <algorithm>    // std::max
+
+#include "json.hpp"
+#include "spline.h"
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "cost_functions.h"
-#include "json.hpp"
-#include "spline.h"
-#include <iomanip>
+#include "path_planning.h"
 
 // for convenience
 using nlohmann::json;
@@ -69,6 +73,8 @@ int main() {
                &lane,&ref_vel,&target_vel]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
+    
+    MapWaypoints map_waypoints = {map_waypoints_x, map_waypoints_y, map_waypoints_s,map_waypoints_dx, map_waypoints_dy};
 
     double lane_width = 4; //[meter]
     double lane_center_d = 2 + 4*lane;
@@ -102,6 +108,8 @@ int main() {
           // since last time.
           vector<double> previous_path_x = j[1]["previous_path_x"];
           vector<double> previous_path_y = j[1]["previous_path_y"];
+          Trajectory previous_path = {previous_path_x, previous_path_y};
+
 
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"]; //The previous list's last point's frenet s value
@@ -158,6 +166,9 @@ int main() {
           }*/
 
           bool too_close = false;
+          //bool too_close_rear = false;
+          //bool too_close_left = false;
+          //bool too_close_right = false;
           double deceleration_dist; //the distance to decelerate
 
           //find ref_v to use
@@ -175,16 +186,17 @@ int main() {
 
                 too_close = true;
                 target_vel = check_speed; //set the target velocity to the vehicle in front of us
-                deceleration_dist = s_gap - 30; 
+                deceleration_dist = s_gap - 30; //adaptive distance. when deceleration_dist = 0, ref_vel=check_vel
 
               }
             }
           }
 
           if(too_close) {
-            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/deceleration_dist; 
-              //get to the target velocity in 15 meter.
+            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/fabs(deceleration_dist); 
+            deceleration = std::min(2.0, deceleration); //to avoid larger acceleration
             ref_vel -= deceleration * 0.02;
+            ref_vel = std::max(0.0001, ref_vel); //to avoid negative velocity when the velocity is small
 
             if(deceleration_dist<0) {
               cout << "deceleration_dist<0, larger deceleration is needed" << endl;
@@ -202,9 +214,17 @@ int main() {
            * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
            */
 
+          Vehicle ego_vehicle = {car_x, car_y, car_s, car_d, car_yaw, car_speed, lane, ref_vel, "KL"};
+
+          int prev_size = previous_path_x.size();
+          int next_size = 50 - prev_size; 
+            //How many point we want to generate in next path beside the point in previous path
+
+          PathPlanning path_planning(ego_vehicle, previous_path, sensor_fusion, map_waypoints);
+          Trajectory next_path = path_planning.chooseNextState();
         
-          vector<double> next_path_x;
-          vector<double> next_path_y;
+          //vector<double> next_path_x = next_path.x_;
+          //vector<double> next_path_y = next_path.y_;
 
 
           /*
@@ -212,8 +232,10 @@ int main() {
                     previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                     lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);*/
 
+          /*
           if(too_close) {
-          //if(true) { //for debug
+
+            cout << "\n\n\n====================================================================" << endl;
             cout << "doing path planning......." << endl;
             double cost_min = 10000;
 
@@ -233,26 +255,20 @@ int main() {
                   potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
               
               //double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
-              CalculateCost cost;
-              cost.init(next_path_x_ref, next_path_y_ref, ref_vel, sensor_fusion, lane, potential_lane[i]);
+              Cost cost = Cost(next_path_x_ref, next_path_y_ref, ref_vel, sensor_fusion, lane, potential_lane[i]);
 
               //find the min cost trajectory
               double cost_temp = cost.calculateCost(1);
               cout << "cost_temp = " << cost_temp << endl;
               if(cost_temp < cost_min) {
-                cout << "\n\nget smaller cost " << cost_temp << endl;
+                cout << "\nget smaller cost " << cost_temp << endl;
                 cout << "current @ lane " << lane << endl;
                 cout << "going to @ lane " << potential_lane[i] << endl;
                 
                 cost_min = cost_temp;
 
-                //re-initialize the variable
-                //vector<double> next_path_x;
-                //vector<double> next_path_y;
-
                 next_path_x = next_path_x_ref;
                 next_path_y = next_path_y_ref;
-                
               }
             }
           } else {
@@ -260,104 +276,7 @@ int main() {
                 previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
                 lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
           }
-
-          /*
-          cout << "next_path_x.size() = " << next_path_x.size() << endl;
-          cout << "next_path_y.size() = " << next_path_y.size() << endl;
-          cout << setw(width) << "x" << setw(width) << "y" << endl;
-          for(int i=0; i<next_path_x.size(); i++) {
-            cout << setw(width) << next_path_x[i] << setw(width) << next_path_y[i] << endl;
-          }*/
-
-
-          /*
-          vector<double> spline_x; //point x for spline generation
-          vector<double> spline_y; //point x for spline generation
-
-          double ref_x, ref_y, ref_yaw;
-          double ref_x_prev, ref_y_prev;
-
-
-          //if previous size is almost empty, use the car as starting reference
-          if(prev_size < 2) {
-            ref_x = car_x; 
-            ref_y = car_y;
-            ref_yaw = deg2rad(car_yaw);
-
-            //use two points that make the path tangent to the car. dist=1
-            ref_x_prev = car_x - cos(car_yaw); 
-            ref_y_prev = car_y - sin(car_yaw); 
-
-          } else {
-            //use last two points from previous path to create future path
-            ref_x = previous_path_x[prev_size-1];
-            ref_y = previous_path_y[prev_size-1];
-
-            ref_x_prev = previous_path_x[prev_size-2];
-            ref_y_prev = previous_path_y[prev_size-2];
-            ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
-
-          }
-
-          spline_x.push_back(ref_x_prev);
-          spline_x.push_back(ref_x);
-
-          spline_y.push_back(ref_y_prev);
-          spline_y.push_back(ref_y);
-
-          //In Frenet add evenly 30m space point ahead of the car reference
-          vector<double> next_wp0 = getXY(car_s+30,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90,lane_center_d,map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-          spline_x.push_back(next_wp0[0]);
-          spline_x.push_back(next_wp1[0]);
-          spline_x.push_back(next_wp2[0]);
-
-          spline_y.push_back(next_wp0[1]);
-          spline_y.push_back(next_wp1[1]);
-          spline_y.push_back(next_wp2[1]);
-
-          // convert map coordiante to vehicle coordinate
-          map2car(spline_x, spline_y, ref_x, ref_y, ref_yaw);
-
-          // create a spline
-          tk::spline traj;
-          traj.set_points(spline_x, spline_y);
-          
-          double target_x = 30.0;
-          double target_y = traj(target_x);
-          double target_dist = sqrt(target_x*target_x+target_y*target_y);
-          int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
-          double N = target_dist/(0.02*ref_vel/2.24);
-            //Number of point within target_x.
-            //0.02 is from the car updates every 0.02 second
-            //2.24 convert MPH to m/s
-          double x_add_on = target_x/N; //evenly spacing within target_x
-
-          vector<double> next_path_x;
-          vector<double> next_path_y;
-
-          double x_point, y_point;
-          x_point = 0;
-          
-          for(int i=0; i<next_size; i++) {
-            x_point += x_add_on;
-            y_point = traj(x_point);
-
-            next_path_x.push_back(x_point);
-            next_path_y.push_back(y_point);
-
-          }
-
-          // convert CAR coordiante to MAP coordinate
-          car2map(next_path_x, next_path_y, ref_x, ref_y, ref_yaw);
           */
-
-
-         int prev_size = previous_path_x.size();
-         //cout << "prev_size = " << prev_size << endl;
-         int next_size = 50 - prev_size; //How many point we want to generate in next path beside the point in previous path
 
 
           // define the actual (x,y) points used for the planner
@@ -375,8 +294,8 @@ int main() {
           // attach next path points
           //cout << "attach the next path" << endl;
           for(int i=0; i<next_size; i++) {
-            next_x_vals.push_back(next_path_x[i]);
-            next_y_vals.push_back(next_path_y[i]);
+            next_x_vals.push_back(next_path.x_[i]);
+            next_y_vals.push_back(next_path.y_[i]);
             //cout << setw(width) << next_x_vals[i+prev_size] << setw(width) << next_y_vals[i+prev_size] << endl;
           }
 
