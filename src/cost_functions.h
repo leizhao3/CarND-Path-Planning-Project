@@ -21,13 +21,15 @@ using std::setw;
 //WEIGHTED_COST_FUNCTIONS
 struct WEIGHTED_COST_FUNCTIONS {
     double max_speed_cost = 10000;
-    double slow_speed_cost = 1000;
-    double time_diff_cost = 1000;
+    double slow_speed_cost = 100;
+    double time_diff_cost = 500;
     double max_LC_time_cost = 100;
     //double max_jerk_cost = 10000;
     //double total_jerk_cost = 1000;
-    double collision_cost = 10000;
-    double buffer_cost = 1000;
+    double side_collision_cost = 10000;
+    double side_buffer_cost = 1000;
+    double front_collision_cost = 10000;
+    double front_buffer_cost = 1000;
     //double max_accel_cost = 10000;
     //double max_accel_cost_d = 10000;
     //double total_accel_cost = 50;
@@ -55,13 +57,16 @@ struct WEIGHTED_COST_FUNCTIONS {
 class Cost {
     public:
         //contructor 
-        Cost() {}
-        Cost(Trajectory trajectory, Vehicle vehicle, vector<vector<double>> &sensor_fusion) {
-            next_path_x_ = trajectory.x_;
-            next_path_y_ = trajectory.y_;
-            ref_vel_ = vehicle.ref_vel_;
+        Cost(Trajectory &trajectory, TrajectorySD &trajectory_sd, Vehicle &vehicle, vector<vector<double>> &sensor_fusion, 
+             int lane, double ref_vel, string state) {
+            next_path_x_ = trajectory.x_;//in MAP coordinate
+            next_path_y_ = trajectory.y_;//in MAP coordinate
+            next_path_s_ = trajectory_sd.s_;//in FRENET coordinate
+            next_path_d_ = trajectory_sd.d_;//in FRENET coordinate
             sensor_fusion_ = sensor_fusion;
-            lane_ = vehicle.lane_;
+            ref_vel_ = ref_vel;
+            lane_ = lane;
+            state_ = state;
             //potential_lane_ = potential_lane;
         }
 
@@ -74,8 +79,11 @@ class Cost {
         double maxSpeedCost();
         double slowSpeedCost();
 
-        double collisionCost();
-        double bufferCost();
+        double sideCollisionCost();
+        double sideBufferCost();
+
+        double frontCollisionCost();
+        double frontBufferCost();
 
         //double changeLaneCost();
 
@@ -87,9 +95,12 @@ class Cost {
         WEIGHTED_COST_FUNCTIONS Weight;
         vector<double> next_path_x_; 
         vector<double> next_path_y_;
+        vector<double> next_path_s_; 
+        vector<double> next_path_d_;
         double ref_vel_;
         vector<vector<double>> sensor_fusion_;
         int lane_;
+        string state_;
         //int potential_lane_;
 
 
@@ -97,7 +108,9 @@ class Cost {
         const double MAX_ACCEL = 10; //[m/s^2], the maximum acceleration
         const double MAX_JERK = 10; //[m/s^3], the maximum jerk
         const double MAX_LC_TIME = 3; //[s], the maximum allowable time to make lane change
-        const double VEHICLE_RADIUS = 1.5; //[meter], model vehicle as circle to simplify collision detection
+        const double VEHICLE_RADIUS = 1.5; //[meter], model vehicle as circle to simplify buffer cost calculation
+        const double VEHICLE_LENTH = 5.0; //[meter], parapmeter used for front collision
+        const double VEHICLE_WIDTH = 3.0; //[meter], parapmeter used for side collision
         const double EXPECTED_JERK_IN_ONE_SEC = 2; //[m/s^2]
         const double EXPECTED_ACC_IN_ONE_SEC = 1; //[m/s]
         const double SPEED_LIMIT = 50; //[MPH]
@@ -106,18 +119,6 @@ class Cost {
 
 };
 
-/*
-void Cost::init(
-    vector<double> &next_path_x, vector<double> &next_path_y, double ref_vel,
-    vector<vector<double>> &sensor_fusion, int lane, int potential_lane) {
-    next_path_x_ = next_path_x;
-    next_path_y_ = next_path_y;
-    ref_vel_ = ref_vel;
-    sensor_fusion_ = sensor_fusion;
-    lane_ = lane;
-    potential_lane_ = potential_lane;
-    
-}*/
 
 /**
  * @param verbose 1 - print segregated cost, 0 - NOT print segreated cost
@@ -131,38 +132,48 @@ double Cost::calculateCost(int verbose) {
 
     del_cost_temp = Weight.max_speed_cost * maxSpeedCost();
     del_cost.push_back(del_cost_temp);
-    title.push_back("maxSpeedCost");
+    title.push_back("maxSpd");
 
     del_cost_temp = Weight.slow_speed_cost * slowSpeedCost();
     del_cost.push_back(del_cost_temp);
-    title.push_back("slowSpeedCost");
+    title.push_back("slowSpd");
 
-    del_cost_temp = Weight.collision_cost * collisionCost();
+    del_cost_temp = Weight.side_collision_cost * sideCollisionCost();
     del_cost.push_back(del_cost_temp);
-    title.push_back("collisionCost");
+    title.push_back("Cllsn_side");
 
-    del_cost_temp = Weight.buffer_cost * bufferCost();
+    del_cost_temp = Weight.side_buffer_cost * sideBufferCost();
     del_cost.push_back(del_cost_temp);
-    title.push_back("bufferCost");
+    title.push_back("Bffr_side");
+
+    del_cost_temp = Weight.front_collision_cost * frontCollisionCost();
+    del_cost.push_back(del_cost_temp);
+    title.push_back("Cllsn_FR");
+
+    del_cost_temp = Weight.front_buffer_cost * frontBufferCost();
+    del_cost.push_back(del_cost_temp);
+    title.push_back("Bffr_FR");
 
     //del_cost_temp = Weight.change_lane_cost * changeLaneCost();
     //del_cost.push_back(del_cost_temp);
     //title.push_back("changeLaneCost");
 
-    del_cost_temp = Weight.max_LC_time_cost * maxLCTimeCost();
-    del_cost.push_back(del_cost_temp);
-    title.push_back("maxLCTimeCost");
+    if ((state_.compare("LCL") == 0) || (state_.compare("LCR") == 0)) {
+        del_cost_temp = Weight.max_LC_time_cost * maxLCTimeCost();
+        del_cost.push_back(del_cost_temp);
+        title.push_back("maxLCTime");
 
-    del_cost_temp = Weight.time_diff_cost * timeDiffCost();
-    del_cost.push_back(del_cost_temp);
-    title.push_back("timeDiffCost");
+        del_cost_temp = Weight.time_diff_cost * timeDiffCost();
+        del_cost.push_back(del_cost_temp);
+        title.push_back("timeDiff");
+    }
 
     for(int i=0; i<del_cost.size(); i++) {
         cost += del_cost[i];
     }
 
     if(verbose == 1) {
-        int width = 15;
+        int width = 11;
         
         for(int i=0; i<title.size(); i++) {
             cout << setw(width) << title[i];
@@ -212,35 +223,44 @@ double Cost::slowSpeedCost() {
     return cost;
 }
 
-double Cost::collisionCost() {
+double Cost::sideCollisionCost() {
 
     double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_);
-    double cost = 0;
 
-    if(nearest < 2*VEHICLE_RADIUS) {
-        cost = 1.0;
+    if(nearest < VEHICLE_WIDTH) {
+        return 1.0;
     }
     else {
-        cost = 0.0;
+        return 0.0;
     }
-
-    //cout << "collisionCost() = " << cost << endl;
-
-    return cost;
-    
 }
 
-double Cost::bufferCost() {
+double Cost::sideBufferCost() {
 
     double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_);
-    double cost = logistic(2*VEHICLE_RADIUS / nearest);
+    return logistic(VEHICLE_WIDTH / nearest);
 
-    //cout << "nearest = " << nearest << endl;
-    //cout << "bufferCost() = " << cost << endl;
+}
 
-    return cost;
+double Cost::frontCollisionCost() {
+
+    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_);
+
+    if(nearest_front < VEHICLE_LENTH) {
+        return 1.0;
+    }
+    else {
+        return 0.0;
+    }
+}
+
+double Cost::frontBufferCost() {
+
+    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_);
+    return logistic(VEHICLE_LENTH / nearest_front);
     
 }
+
 
 /*
 double Cost::changeLaneCost() {

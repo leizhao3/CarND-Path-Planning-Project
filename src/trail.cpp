@@ -15,20 +15,25 @@ using std::endl;
 using std::setw;
 
 
-struct Try {
-  double x;
-};
-
-class Print {
-  private:
-    //
-  
+class Print {    
   public:
-    //
+    void output(double& trial) {
+      cout << "inside class: trail = " << trial << endl;
+      trial += 1;
+      cout << "inside class: trail+1 = " << trial << endl;
+    }
 };
 
 
 int main() {
+  Print foo;
+  double number = 1.2;
+
+  cout << "outside class before = " << number << endl;
+
+  foo.output(number);
+
+  cout << "outside class after = " << number << endl;
 
   return 0;
 

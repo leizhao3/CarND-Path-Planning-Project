@@ -67,10 +67,11 @@ int main() {
   int lane = 1; //start out at the center lane. lane[LEFT,MID,RIGHT] = [0,1,2]
   double ref_vel = 0; // [mph]. 
   double target_vel = 49.5; // [mph]. The initial target speed is set slightly below speed limit.
+  string state = "KL"; //"KL" or "LCL" or "LCR" or "PLCL" or "PLCL"
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy, 
-               &lane,&ref_vel,&target_vel]
+               &lane,&ref_vel,&target_vel, &state]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     
@@ -102,6 +103,7 @@ int main() {
           double car_d = j[1]["d"]; //[meter] The car's d position in frenet coordinates
           double car_yaw = j[1]["yaw"]; //[deg] The car's yaw angle in the map
           double car_speed = j[1]["speed"]; //[MPH] The car's speed
+          Vehicle ego_vehicle = {car_x, car_y, car_s, car_d, car_yaw, car_speed};
 
           // Previous path data given to the Planner. Return the previous list but with 
           // PROCESSED POINTS REMOVED, to show how far along the path has processed
@@ -114,6 +116,7 @@ int main() {
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"]; //The previous list's last point's frenet s value
           double end_path_d = j[1]["end_path_d"]; //The previous list's last point's frenet d value
+          vector<double> end_path = {end_path_s, end_path_d};
 
           /**
            * Sensor Fusion Data, a 2d vector of all other cars on the same side 
@@ -193,16 +196,22 @@ int main() {
           }
 
           if(too_close) {
-            double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/fabs(deceleration_dist); 
-            deceleration = std::min(2.0, deceleration); //to avoid larger acceleration
-            ref_vel -= deceleration * 0.02;
-            ref_vel = std::max(0.0001, ref_vel); //to avoid negative velocity when the velocity is small
+            if(ref_vel > target_vel) {
+              double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/fabs(deceleration_dist); 
+              deceleration = std::min(2.0, deceleration); //to avoid larger acceleration
+              ref_vel -= deceleration * 0.02;
+              ref_vel = std::max(0.0001, ref_vel); //to avoid negative velocity when the velocity is small
+            }
 
             if(deceleration_dist<0) {
               cout << "deceleration_dist<0, larger deceleration is needed" << endl;
             }
-          } else if (ref_vel < 49.5) {
-            ref_vel += .224;
+          } else {
+
+            if (ref_vel < 49.5) {
+              ref_vel += .224;
+            }
+
           }
 
 
@@ -214,17 +223,22 @@ int main() {
            * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
            */
 
-          Vehicle ego_vehicle = {car_x, car_y, car_s, car_d, car_yaw, car_speed, lane, ref_vel, "KL"};
+          PathPlanning path_planning(ego_vehicle, previous_path, sensor_fusion, map_waypoints, lane, ref_vel, state, end_path);
+          Trajectory next_path;
 
-          int prev_size = previous_path_x.size();
-          int next_size = 50 - prev_size; 
-            //How many point we want to generate in next path beside the point in previous path
+          next_path = path_planning.chooseNextState();
+          path_planning.statusUpdate(lane, ref_vel, state);
 
-          PathPlanning path_planning(ego_vehicle, previous_path, sensor_fusion, map_waypoints);
-          Trajectory next_path = path_planning.chooseNextState();
+          /*
+          if(too_close) {
+            next_path = path_planning.chooseNextState();
+            path_planning.statusUpdate(lane, ref_vel, state);
+          } 
+          else {
+            next_path = path_planning.generateTrajectory(lane, ref_vel);
+          }*/
+          cout << "state after updated = " << state << endl;
         
-          //vector<double> next_path_x = next_path.x_;
-          //vector<double> next_path_y = next_path.y_;
 
 
           /*
@@ -279,6 +293,10 @@ int main() {
           */
 
 
+          int prev_size = previous_path_x.size();
+          int next_size = 50 - prev_size; 
+              //How many point we want to generate in next path beside the point in previous path
+          
           // define the actual (x,y) points used for the planner
           vector<double> next_x_vals;
           vector<double> next_y_vals;

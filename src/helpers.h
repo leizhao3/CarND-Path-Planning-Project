@@ -5,12 +5,45 @@
 #include <string>
 #include <vector>
 #include "spline.h"
+#include <iomanip>
+#include <iostream>
 
 // for convenience
 using std::string;
 using std::vector;
 using std::cout;
 using std::endl;
+using std::setw;
+
+
+
+struct Vehicle {
+  double car_x_; //[meter] The car's x position in MAP coordinates
+  double car_y_; //[meter] The car's y position in MAP coordinates
+  double car_s_; //[meter] The car's s position in frenet coordinates
+  double car_d_; //[meter] The car's d position in frenet coordinates
+  double car_yaw_; //[deg] The car's yaw angle in the map
+  double car_speed_; //[MPH] The car's speed
+};
+
+struct Trajectory {
+  vector<double> x_;
+  vector<double> y_;
+};
+
+struct TrajectorySD {
+  vector<double> s_;
+  vector<double> d_;
+};
+
+struct MapWaypoints {
+  vector<double> x_;
+  vector<double> y_;
+  vector<double> s_;
+  vector<double> dx_;
+  vector<double> dy_;
+};
+
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -146,6 +179,45 @@ vector<double> getFrenet(double x, double y, double theta,
   frenet_s += distance(0,0,proj_x,proj_y);
 
   return {frenet_s,frenet_d};
+}
+
+
+/**
+ * get Frenet for a trajectory
+ * @param trajectory_xy trajectory in MAP coordinate
+ * @param map_waypoints
+ * @return trajectory_sd trajectory in FRENET coordinate
+ */
+TrajectorySD getFrenet_traj(Trajectory &trajectory_xy, MapWaypoints &map_waypoints, Vehicle &ego_car, vector<double> &end_path) {
+
+  TrajectorySD trajectory_sd;
+
+  const vector<double> maps_x = map_waypoints.x_;
+  const vector<double> maps_y = map_waypoints.y_;
+
+  double x, x_prev, y, y_prev, theta;
+
+
+  for(int i=0; i<trajectory_xy.x_.size(); i++) {
+    if(i == 0) {
+      trajectory_sd.s_.push_back(end_path[0]);
+      trajectory_sd.d_.push_back(end_path[1]);
+
+    } else {
+      x = trajectory_xy.x_[i];
+      x_prev = trajectory_xy.x_[i-1];
+      y = trajectory_xy.y_[i];
+      y_prev = trajectory_xy.y_[i-1];
+      theta = atan2(y-y_prev, x-x_prev);
+
+      vector<double> sd_temp = getFrenet(x,y,theta,maps_x,maps_y);
+
+      trajectory_sd.s_.push_back(sd_temp[0]);
+      trajectory_sd.d_.push_back(sd_temp[1]);
+    }
+  }
+
+  return trajectory_sd;
 }
 
 /**
@@ -435,12 +507,10 @@ double nearestDist2SingleCar(
         //cout << "dT = " << dT << endl;
         //cout << "x\ty\tnext_path_x[i]\tnext_path_y[i]" << endl;
         //cout << x << "\t" << y << "\t" << next_path_x[i] << "\t" << next_path_y[i] << endl;
-      }
-      
+      } 
     }
 
     return closest;
-
 }
 
 
@@ -477,32 +547,82 @@ double nearestDist2Cars(
   }
 
 
-struct Vehicle {
-  double car_x_; //[meter] The car's x position in MAP coordinates
-  double car_y_; //[meter] The car's y position in MAP coordinates
-  double car_s_; //[meter] The car's s position in frenet coordinates
-  double car_d_; //[meter] The car's d position in frenet coordinates
-  double car_yaw_; //[deg] The car's yaw angle in the map
-  double car_speed_; //[MPH] The car's speed
-  int lane_; //current lane 
-  double ref_vel_; //reference velocity for planning
-  string state_; //current state of the car
-};
+/**
+  * @param ID car's unique ID
+  * @param x [meter] car's x position in map coordinates
+  * @param y [meter] car's y position in map coordinates
+  * @param vx [m/s] car's x velocity
+  * @param vy [m/s] car's y velocity
+  * @param s [meter] car's s position in frenet coordinates
+  * @param d [meter] car's d position in frenet coordinates. 
+ */
+double nearestDist2SingleCar_front(
+  vector<double> &next_path_s, vector<double> &next_path_d, 
+  vector<double> &sensor_fusion_single, double ref_vel) {
+    
+    double closest = 999999;
+
+    double s = sensor_fusion_single[5];
+    double vx = sensor_fusion_single[3];
+    double vy = sensor_fusion_single[4];
+    double s_dot = sqrt(vx*vx+vy*vy); //assume the worst: all velocity is in s
+    double s_double_dot = 0;
+
+    double d = sensor_fusion_single[6];
+
+    for(int i=0; i<(next_path_s.size()-1); i++) {
+      double dist = distance(next_path_s[i], next_path_d[i],next_path_s[i+1], next_path_d[i+1]);
+        //get distance from the the current point of analysis to the next point of analysis in next_path.
+      double dT = dist/(ref_vel/2.24); 
+        //the time needed for ego vehicle to get to the next point
+        //ref_vel/2.24 convert MPH to m/s
+      s += s_dot*dT + s_double_dot*dT*dT; //the s of the other vehicle in lane
+
+      double dist2ego_front = fabs(s-next_path_s[i]);
+
+      //Only check the vehicle showing up in the range of d of ego vehicle
+      if((d>next_path_d[i]-1.5) && (d<next_path_d[i]+1.5)) {
+        if(dist2ego_front < closest) {
+          closest = dist2ego_front;
+          //cout << "Getting closer distance " << endl;
+          //cout << "dT = " << dT << endl;
+          //cout << "x\ty\tnext_path_x[i]\tnext_path_y[i]" << endl;
+          //cout << x << "\t" << y << "\t" << next_path_x[i] << "\t" << next_path_y[i] << endl;
+        } 
+      }
+    }
+
+    return closest;
+}
 
 
-struct Trajectory {
-  vector<double> x_;
-  vector<double> y_;
-};
+/**
+ * Calculates the closest FRONT distance to any vehicle during a trajectory.
+ * 
+ * Sensor Fusion Data, a 2d vector of all other cars on the same side 
+ * of the road.Accessed via [ID][@param]
+ * @param ID car's unique ID
+ * @param x [meter] car's x position in map coordinates
+ * @param y [meter] car's y position in map coordinates
+ * @param vx [m/s] car's x velocity
+ * @param vy [m/s] car's y velocity
+ * @param s [meter] car's s position in frenet coordinates
+ * @param d [meter] car's d position in frenet coordinates.         
+ */
+double nearestDist2Cars_front(
+  vector<double> &next_path_s, vector<double> &next_path_d, 
+  vector<vector<double>> &sensor_fusion, double ref_vel) {
+    
+    double closest = 999999;
+    for(int i=0; i<sensor_fusion.size(); i++) {
 
-struct MapWaypoints {
-  vector<double> x_;
-  vector<double> y_;
-  vector<double> s_;
-  vector<double> dx_;
-  vector<double> dy_;
-};
+      double dist = nearestDist2SingleCar_front(next_path_s, next_path_d, sensor_fusion[i], ref_vel);
 
-
+      if(dist<closest) {
+        closest = dist;
+      }
+    }
+    return closest;
+  }
 
 #endif  // HELPERS_H

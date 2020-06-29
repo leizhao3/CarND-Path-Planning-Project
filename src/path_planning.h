@@ -23,19 +23,20 @@ using std::setw;
 class PathPlanning {
     public: 
         // Constructors
-        //PathPlanning();
-        
         PathPlanning(
             Vehicle &ego_vehicle, Trajectory &previous_path, 
-            vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints);
+            vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints,
+            int lane, double ref_vel, string state, vector<double> &end_path);
 
         // Destructor
         ~PathPlanning();
 
         Trajectory chooseNextState();
         vector<string> successorStates();
-        Trajectory generateTrajectory(string state);
+        Trajectory generateTrajectory(int ref_lane, double ref_vel);
         double findRefVel(int lane);
+
+        void statusUpdate(int &lane, double &ref_vel, string &state); //pass updated value to upper func
     
     private:
         Vehicle ego_vehicle_;
@@ -53,73 +54,154 @@ class PathPlanning {
              * @param s [meter] car's s position in frenet coordinates
              * @param d [meter] car's d position in frenet coordinates. 
              */
+        int lane_;
+        double ref_vel_;
+        string state_;
+        vector<double> end_path_;
    
 };
 
 
 PathPlanning::PathPlanning(
     Vehicle &ego_vehicle, Trajectory &previous_path, 
-    vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints) {
+    vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints, 
+    int lane, double ref_vel, string state, vector<double> &end_path) {
 
     ego_vehicle_ = ego_vehicle;
     previous_path_ = previous_path;
     sensor_fusion_ = sensor_fusion;
     map_waypoints_ = map_waypoints;
+    lane_ = lane;
+    ref_vel_ = ref_vel;
+    state_ = state;
+    end_path_ = end_path;
+   
 
 }
 
 PathPlanning::~PathPlanning() {};
 
-
 Trajectory PathPlanning::chooseNextState() {
-  /**
-   * Here you can implement the transition_function code from the Behavior 
-   *   Planning Pseudocode classroom concept.
-   *
-   * @param predictions predictions map, a map of vehicle id keys with predicted
-   *   vehicle trajectories as values. Trajectories are a vector of Vehicle 
-   *   objects representing the vehicle at the current timestep and one timestep
-   *   in the future.
-   * @return The best (lowest cost) trajectory corresponding to the next ego 
-   *   vehicle state.
-   *
-   * Functions that will be useful:
-   * 1. successor_states - Uses the current state to return a vector of possible
-   *    successor states for the finite state machine.
-   * vector<string> Vehicle::successor_states()
-   * 
-   * 2. generate_trajectory - Returns a vector of Vehicle objects representing 
-   *    a vehicle trajectory, given a state and predictions. Note that 
-   *    trajectory vectors might have size 0 if no possible trajectory exists 
-   *    for the state. 
-   * vector<Vehicle> Vehicle::generate_trajectory(string state, 
-   *                                         map<int, vector<Vehicle>> &predictions)
-   * 
-   * 3. calculate_cost - Included from cost.cpp, computes the cost for a trajectory.
-   * float calculate_cost(const Vehicle &vehicle, 
-   *                  const map<int, vector<Vehicle>> &predictions, 
-   *                  const vector<Vehicle> &trajectory) {
-   * // Sum weighted cost functions to get total cost for trajectory.
-   *
-   * TODO: Your solution here.
-   */
+    /**
+     * Here you can implement the transition_function code from the Behavior 
+     *   Planning Pseudocode classroom concept.
+     *
+     * @param predictions predictions map, a map of vehicle id keys with predicted
+     *   vehicle trajectories as values. Trajectories are a vector of Vehicle 
+     *   objects representing the vehicle at the current timestep and one timestep
+     *   in the future.
+     * @return The best (lowest cost) trajectory corresponding to the next ego 
+     *   vehicle state.
+     *
+     * Functions that will be useful:
+     * 1. successor_states - Uses the current state to return a vector of possible
+     *    successor states for the finite state machine.
+     * vector<string> Vehicle::successor_states()
+     * 
+     * 2. generate_trajectory - Returns a vector of Vehicle objects representing 
+     *    a vehicle trajectory, given a state and predictions. Note that 
+     *    trajectory vectors might have size 0 if no possible trajectory exists 
+     *    for the state. 
+     * vector<Vehicle> Vehicle::generate_trajectory(string state, 
+     *                                         map<int, vector<Vehicle>> &predictions)
+     * 
+     * 3. calculate_cost - Included from cost.cpp, computes the cost for a trajectory.
+     * float calculate_cost(const Vehicle &vehicle, 
+     *                  const map<int, vector<Vehicle>> &predictions, 
+     *                  const vector<Vehicle> &trajectory) {
+     * // Sum weighted cost functions to get total cost for trajectory.
+     *
+     * TODO: Your solution here.
+     */
 
-  vector<string> states = successorStates();
-  vector<Trajectory> final_trajectories;
-  Cost cost = Cost(previous_path_, ego_vehicle_, sensor_fusion_);
-  vector<double> costs = {};
+    vector<string> states = successorStates();    
+    vector<Trajectory> final_trajectories;
+    vector<double> costs = {};
+    vector<int> ref_lane_out = {};
+    vector<double> ref_vel_out = {};
 
-  for(int i=0; i<states.size(); i++) {
-    Trajectory trajectory = generateTrajectory(states[i]);
-    double cost_temp = cost.calculateCost(0);
-    costs.push_back(cost_temp);
-    final_trajectories.push_back(trajectory);
-  }
+    cout << "=====================================PATH PLANNING=====================================" << endl;
 
-  vector<double>::iterator best_cost = std::min_element(begin(costs), end(costs));
-  int best_idx = distance(begin(costs), best_cost);
+    for(int i=0; i<states.size(); i++) {
+        int ref_lane = lane_;
+        double ref_vel = ref_vel_;
 
-  return final_trajectories[best_idx];
+        if (states[i].compare("KL") == 0) {
+            //no change on the ref_lane
+            //no change on the ref_vel
+        }
+        else if (states[i].compare("LCL") == 0) {
+            ref_lane -= 1; //minus 1 lane
+            ref_vel = findRefVel(ref_lane);
+        }
+        else if (states[i].compare("LCR") == 0) {
+            ref_lane += 1; // add 1 lane
+            ref_vel = findRefVel(ref_lane);
+        }
+        else if (states[i].compare("PLCL") == 0) {
+            //no change on the ref_lane
+            ref_vel = findRefVel((ref_lane-1)); //set the speed to the vehicle on the left lane
+        }
+        else if (states[i].compare("PLCR") == 0) {
+            //no change on the ref_lane
+            ref_vel = findRefVel((ref_lane+1)); //set the speed to the vehicle on the right lane
+        }
+
+        Trajectory trajectory = generateTrajectory(ref_lane, ref_vel);
+        
+        int width = 15; 
+        /*
+        cout << "trajectory" << endl;
+        cout << setw(width) << "x" << setw(width) << "y" << endl;
+        for(int i=0; i<trajectory.x_.size(); i++) {
+            cout << setw(width) << trajectory.x_[i] << setw(width) << trajectory.y_[i] << endl;
+        }
+        cout << endl;*/
+
+        TrajectorySD trajectory_sd = getFrenet_traj(trajectory, map_waypoints_, ego_vehicle_, end_path_);
+        /*
+        cout << "trajectory_sd" << endl;
+        cout << setw(width) << "s" << setw(width) << "d" << endl;
+        for(int i=0; i<trajectory_sd.s_.size(); i++) {
+            cout << setw(width) << trajectory_sd.s_[i] << setw(width) << trajectory_sd.d_[i] << endl;
+        }
+        cout << endl;*/
+
+        Cost cost = Cost(trajectory, trajectory_sd, ego_vehicle_, sensor_fusion_, ref_lane, ref_vel, states[i]);
+        cout << "---------" << states[i] << "---------" << endl;
+        double cost_temp = cost.calculateCost(1);
+
+        costs.push_back(cost_temp);
+        ref_lane_out.push_back(ref_lane);
+        ref_vel_out.push_back(ref_vel);
+        final_trajectories.push_back(trajectory);
+
+    }
+
+    //debug
+    int width = 15;
+    cout << "------------------------SUMMARY------------------------" << endl;
+    cout << setw(width) << "states is ";
+    for(int i=0; i<states.size(); i++) {
+        cout << setw(width) << states[i];
+    }
+    cout << endl;
+    cout << setw(width) << "costs is ";
+    for(int i=0; i<costs.size(); i++) {
+        cout << setw(width) << costs[i];
+    }
+    cout << "\n\n" << endl;
+
+    vector<double>::iterator best_cost = std::min_element(begin(costs), end(costs));
+    int best_idx = distance(begin(costs), best_cost);
+
+    //update state_ in this class so that it would pass to upper function
+    state_ = states[best_idx];
+    lane_ = ref_lane_out[best_idx];
+    ref_vel_ = ref_vel_out[best_idx];
+
+
+    return final_trajectories[best_idx];
 }
 
 vector<string> PathPlanning::successorStates() {
@@ -131,28 +213,26 @@ vector<string> PathPlanning::successorStates() {
    */
   vector<string> states;
   states.push_back("KL");
-  int lane = ego_vehicle_.lane_;
-  string state = ego_vehicle_.state_;
 
   //state = the current state of the vehicle. defined in the vehicle class.
-  if(state.compare("KL") == 0) {
-      if(lane == 0) {
+  if(state_.compare("KL") == 0) {
+      if(lane_ == 0) {
           states.push_back("PLCR");
       } 
-      else if (lane == 1) {
+      else if (lane_ == 1) {
           states.push_back("PLCL");
           states.push_back("PLCR");
       }
-      else if (lane == 2) {
+      else if (lane_ == 2) {
           states.push_back("PLCL");
       }
-  } else if (state.compare("PLCL") == 0) {
-    if (lane == 1 || lane == 2) {
+  } else if (state_.compare("PLCL") == 0) {
+    if (lane_ == 1 || lane_ == 2) {
       states.push_back("PLCL");
       states.push_back("LCL");
     }
-  } else if (state.compare("PLCR") == 0) {
-    if (lane == 0 || lane == 1) {
+  } else if (state_.compare("PLCR") == 0) {
+    if (lane_ == 0 || lane_ == 1) {
       states.push_back("PLCR");
       states.push_back("LCR");
     }
@@ -168,11 +248,10 @@ vector<string> PathPlanning::successorStates() {
  */
 double PathPlanning::findRefVel(int ref_lane) {
 
-    int target_vehicle_ID = -1;
+    double ref_vel_temp = ref_vel_;
     double check_s_min = 100000;
-    double ref_vel;
 
-    //find the last vehicle on that line in sensor fusion
+    //find the last vehicle on target line in sensor fusion
     for(int i=0; i<sensor_fusion_.size(); i++) {
         double check_d = sensor_fusion_[i][6];
 
@@ -183,21 +262,24 @@ double PathPlanning::findRefVel(int ref_lane) {
             //make sure the target vehicle is the last vehicle on that lane
             if(check_s < check_s_min) {
 
-                target_vehicle_ID = sensor_fusion_[i][0];
                 double target_vehicle_vx = sensor_fusion_[i][3];
                 double target_vehicle_vy = sensor_fusion_[i][4];
-                double target_vehicle_speed = sqrt(target_vehicle_vx*target_vehicle_vx + target_vehicle_vy*target_vehicle_vy);
-                ref_vel = target_vehicle_speed;
+                double target_vehicle_vel = sqrt(target_vehicle_vx*target_vehicle_vx + target_vehicle_vy*target_vehicle_vy);
+                
+                //match the speed to the tail vehicle
+                if(target_vehicle_vel < ref_vel_temp) {
+                    ref_vel_temp -= .224;
+                }
             }
         }
     }
 
-    //if there is no vehicle on that lane, no change on the ref_vel
-    if(target_vehicle_ID == -1) {
-        ref_vel = ego_vehicle_.ref_vel_;
+    //there is no vehicle on target lane
+    if(check_s_min == 100000) {
+        ref_vel_temp += .224;
     }
 
-    return ref_vel;
+    return ref_vel_temp;
 }
 
 
@@ -209,7 +291,7 @@ double PathPlanning::findRefVel(int ref_lane) {
  * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
  * @return next_path_x_ref & next_path_y_ref in MAP coordinate
  */
-Trajectory PathPlanning::generateTrajectory(string state) {
+Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel) {
 
     vector<double> previous_path_x = previous_path_.x_;
     vector<double> previous_path_y = previous_path_.y_;
@@ -217,38 +299,11 @@ Trajectory PathPlanning::generateTrajectory(string state) {
     double car_y = ego_vehicle_.car_y_;
     double car_yaw = ego_vehicle_.car_yaw_;
     double car_s = ego_vehicle_.car_s_;
-    double ref_vel = ego_vehicle_.ref_vel_;
     const vector<double> maps_s = map_waypoints_.s_;
     const vector<double> maps_x = map_waypoints_.x_;
     const vector<double> maps_y = map_waypoints_.y_;
   
     Trajectory next_path_ref; //output trajectory based on current state
-  
-    //decision making on ref_vel & ref_lane;
-    int ref_lane; //referance lane for cost evaluation
-    int target_vehicle_ID;
-  
-    if (state.compare("KL") == 0) {
-        //ref_vel = ref_vel; //no change on speed
-        ref_lane = ego_vehicle_.lane_;
-    }
-    else if (state.compare("LCL") == 0) {
-        ref_lane -= 1; //minus 1 lane
-        ref_vel = findRefVel(ref_lane);
-    }
-    else if (state.compare("LCR") == 0) {
-        ref_lane += 1; // add 1 lane
-        ref_vel = findRefVel(ref_lane);
-    }
-    else if (state.compare("PLCL") == 0) {
-        ref_lane = ego_vehicle_.lane_; //no change lane
-        ref_vel = findRefVel((ref_lane-1)); //set the speed to the vehicle on the left lane
-    }
-    else if (state.compare("PLCR") == 0) {
-        ref_lane = ego_vehicle_.lane_; //no change lane
-        ref_vel = findRefVel((ref_lane+1)); //set the speed to the vehicle on the left lane
-    }
-
   
     vector<double> spline_x; //point x for spline generation
     vector<double> spline_y; //point x for spline generation
@@ -301,6 +356,13 @@ Trajectory PathPlanning::generateTrajectory(string state) {
     // convert map coordiante to vehicle coordinate
     map2car(spline_x, spline_y, ref_x, ref_y, ref_yaw);
 
+    /*
+    int width = 15;
+    cout << setw(width) << "spline_x" << setw(width) << "spline_y" << endl;
+    for(int i=0; i<spline_x.size(); i++) {
+        cout << setw(width) << spline_x[i] << setw(width) << spline_y[i] << endl;
+    }*/
+
     // create a spline
     tk::spline traj;
     traj.set_points(spline_x, spline_y);
@@ -336,6 +398,12 @@ Trajectory PathPlanning::generateTrajectory(string state) {
 }
 
 
+//Pass lane, ref_vel, state to upper function. 
+void PathPlanning::statusUpdate(int &lane, double &ref_vel, string &state) {
+    lane = lane_;
+    ref_vel = ref_vel_;
+    state = state_;
+}
 
 
 

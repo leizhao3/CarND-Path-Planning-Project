@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/build",
+  "command": "/usr/bin/clang++   -I/usr/local/include -I/usr/local/opt/openssl/include  -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk   -std=c++11 -o CMakeFiles/path_planning.dir/src/main.cpp.o -c /Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/main.cpp",
+  "file": "/Volumes/Transcend/Academic/Self-DrivingCarEngineer/Project7_HighwayDriving/CarND-Path-Planning-Project/src/main.cpp"
+}
+]

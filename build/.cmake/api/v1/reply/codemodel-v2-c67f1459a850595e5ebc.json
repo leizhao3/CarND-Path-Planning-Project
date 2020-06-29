@@ -18,7 +18,7 @@
 					]
 				}
 			],
-			"name" : "",
+			"name" : "Debug",
 			"projects" : 
 			[
 				{
@@ -38,7 +38,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "path_planning::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-path_planning-2aad60bae5a2e2d3a75f.json",
+					"jsonFile" : "target-path_planning-Debug-2ab72cc95088e8d73f39.json",
 					"name" : "path_planning",
 					"projectIndex" : 0
 				}
