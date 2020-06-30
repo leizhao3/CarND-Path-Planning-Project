@@ -196,7 +196,7 @@ int main() {
           }
 
           if(too_close) {
-            if(ref_vel > target_vel) {
+            if(ref_vel > (target_vel-3)) {//slightly below the target_vel
               double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/fabs(deceleration_dist); 
               deceleration = std::min(2.0, deceleration); //to avoid larger acceleration
               ref_vel -= deceleration * 0.02;

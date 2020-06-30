@@ -27,9 +27,9 @@ struct WEIGHTED_COST_FUNCTIONS {
     //double max_jerk_cost = 10000;
     //double total_jerk_cost = 1000;
     double side_collision_cost = 10000;
-    double side_buffer_cost = 500;
+    double side_buffer_cost = 750;
     double front_collision_cost = 10000;
-    double front_buffer_cost = 1000;
+    double front_buffer_cost = 1500;
     //double max_accel_cost = 10000;
     //double max_accel_cost_d = 10000;
     //double total_accel_cost = 50;
@@ -107,8 +107,6 @@ class Cost {
 
 
         //CONSTANTS
-        const double MAX_ACCEL = 10; //[m/s^2], the maximum acceleration
-        const double MAX_JERK = 10; //[m/s^3], the maximum jerk
         const double MAX_LC_TIME = 3; //[s], the maximum allowable time to make lane change
         const double VEHICLE_RADIUS = 1.5; //[meter], model vehicle as circle to simplify buffer cost calculation
         const double VEHICLE_LENTH = 5.0; //[meter], parapmeter used for front collision

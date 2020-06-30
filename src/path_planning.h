@@ -33,10 +33,12 @@ class PathPlanning {
 
         Trajectory chooseNextState();
         vector<string> successorStates();
-        Trajectory generateTrajectory(int ref_lane, double ref_vel);
+        Trajectory generateTrajectory(int ref_lane, double ref_vel, string ref_state);
         double findRefVel(int lane);
 
         void statusUpdate(int &lane, double &ref_vel, string &state); //pass updated value to upper func
+
+        double getMaxAccel_T(int ref_lane, double ref_vel, string ref_state);
     
     private:
         Vehicle ego_vehicle_;
@@ -58,6 +60,9 @@ class PathPlanning {
         double ref_vel_;
         string state_;
         vector<double> end_path_;
+
+        const double MAX_ACCEL = 10; //[m/s^2], the maximum acceleration
+        const double MAX_JERK = 10; //[m/s^3], the maximum jerk
    
 };
 
@@ -139,10 +144,38 @@ Trajectory PathPlanning::chooseNextState() {
         else if (states[i].compare("LCL") == 0) {
             ref_lane -= 1; //minus 1 lane
             ref_vel = findRefVel(ref_lane);
+            
+            /*
+            double max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
+            int iteration = 0;
+            while(max_accel > MAX_ACCEL) {
+                ref_vel -= 0.5;
+                ref_vel = std::max(ref_vel, 0.001); //avoid negative speed
+                max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
+                iteration += 1;
+
+                cout << "iteration = " << iteration << endl;
+                cout << "ref_vel = " << ref_vel << endl;
+                cout << "max_accel = " << max_accel << endl;
+            }*/
         }
         else if (states[i].compare("LCR") == 0) {
             ref_lane += 1; // add 1 lane
             ref_vel = findRefVel(ref_lane);
+            
+            /*
+            double max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
+            int iteration = 0;
+            while(max_accel > MAX_ACCEL) {
+                ref_vel -= 0.5;
+                ref_vel = std::max(ref_vel, 0.001); //avoid negative speed
+                max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
+                iteration += 1;
+
+                cout << "iteration = " << iteration << endl;
+                cout << "ref_vel = " << ref_vel << endl;
+                cout << "max_accel = " << max_accel << endl;
+            }*/
         }
         else if (states[i].compare("PLCL") == 0) {
             //no change on the ref_lane
@@ -153,7 +186,7 @@ Trajectory PathPlanning::chooseNextState() {
             ref_vel = findRefVel((ref_lane+1)); //set the speed to the vehicle on the right lane
         }
 
-        Trajectory trajectory = generateTrajectory(ref_lane, ref_vel);
+        Trajectory trajectory = generateTrajectory(ref_lane, ref_vel, states[i]);
         
         int width = 15; 
         
@@ -351,7 +384,7 @@ double PathPlanning::findRefVel(int ref_lane) {
  * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
  * @return next_path_x_ref & next_path_y_ref in MAP coordinate
  */
-Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel) {
+Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string ref_state) {
 
     Trajectory next_path_ref; 
         //output trajectory based on current stateTrajectory next_path_ref; //output trajectory based on current state
@@ -401,10 +434,30 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel) {
     spline_y.push_back(ref_y_prev);
     spline_y.push_back(ref_y);
 
-    //In Frenet add evenly 30m space point ahead of the car reference
-    vector<double> next_wp0 = getXY(car_s+30,2+4*ref_lane,maps_s, maps_x, maps_y);
-    vector<double> next_wp1 = getXY(car_s+60,2+4*ref_lane,maps_s, maps_x, maps_y);
-    vector<double> next_wp2 = getXY(car_s+90,2+4*ref_lane,maps_s, maps_x, maps_y);
+    if(prev_size > 0) {
+        car_s = end_path_[0];
+    }
+
+    vector<double> next_wp0,next_wp1,next_wp2;
+
+    if ((ref_state.compare("LCL") == 0) || (ref_state.compare("LCR") == 0)) {
+        // "LCR", "LCL": In Frenet add evenly 30m space point ahead of the car reference with spread out d
+        next_wp0 = getXY(car_s+30,4*ref_lane,maps_s, maps_x, maps_y);
+        next_wp1 = getXY(car_s+60,4*ref_lane+2,maps_s, maps_x, maps_y);
+        next_wp2 = getXY(car_s+90,4*ref_lane+2,maps_s, maps_x, maps_y);
+        //next_wp0 = getXY(end_path_[0]+30,4*ref_lane-0.66,maps_s, maps_x, maps_y);
+        //next_wp1 = getXY(end_path_[0]+60,4*ref_lane+1.33,maps_s, maps_x, maps_y);
+        //next_wp2 = getXY(end_path_[0]+90,4*ref_lane+2,maps_s, maps_x, maps_y);
+        
+    } else {
+        //"KL", "PLCR", "PLCL": In Frenet add evenly 30m space point ahead of the car reference
+        next_wp0 = getXY(car_s+30,4*ref_lane+2,maps_s, maps_x, maps_y);
+        next_wp1 = getXY(car_s+60,4*ref_lane+2,maps_s, maps_x, maps_y);
+        next_wp2 = getXY(car_s+90,4*ref_lane+2,maps_s, maps_x, maps_y);
+        //next_wp0 = getXY(end_path_[0]+30,4*ref_lane+2,maps_s, maps_x, maps_y);
+        //next_wp1 = getXY(end_path_[0]+60,4*ref_lane+2,maps_s, maps_x, maps_y);
+        //next_wp2 = getXY(end_path_[0]+90,4*ref_lane+2,maps_s, maps_x, maps_y);
+    }
 
     spline_x.push_back(next_wp0[0]);
     spline_x.push_back(next_wp1[0]);
@@ -463,6 +516,56 @@ void PathPlanning::statusUpdate(int &lane, double &ref_vel, string &state) {
     lane = lane_;
     ref_vel = ref_vel_;
     state = state_;
+}
+
+double PathPlanning::getMaxAccel_T(int ref_lane, double ref_vel, string ref_state) {
+    //get maximum tangential acceleration
+
+    double max_accel; //output parameter
+    vector<double> time;
+    vector<double> velocity; 
+    vector<double> acceleration; 
+
+    Trajectory trajectory = generateTrajectory(ref_lane, ref_vel,ref_state);
+    TrajectorySD trajectory_sd = getFrenet_traj(trajectory, map_waypoints_, ego_vehicle_, end_path_);
+
+    
+    for(int i=0; i<(trajectory_sd.d_.size()-1); i++) {
+        double dist = distance(trajectory_sd.s_[i],     trajectory_sd.d_[i],
+                               trajectory_sd.s_[i+1],   trajectory_sd.d_[i+1]);
+        double dT = dist/ref_vel;
+        time.push_back(dT);
+
+        double vel_temp = (trajectory_sd.d_[i+1]-trajectory_sd.d_[i])/dT;
+        velocity.push_back(vel_temp);
+
+    }
+
+    for(int i=0; i<(velocity.size()-1); i++) {
+
+        double accel_temp = (velocity[i]-velocity[i+1])/time[i];
+        acceleration.push_back(accel_temp);
+
+    }
+
+    max_accel = *std::max_element(begin(acceleration), end(acceleration));
+
+    //cout << "max_accel = " << max_accel << endl;
+
+    /*
+    int width = 15;
+    cout << setw(width) << "s" 
+         << setw(width) << "d" 
+         << setw(width) << "vel" 
+         << setw(width) << "accel" << endl;
+    for(int i=0; i<(trajectory_sd.d_.size()-2); i++) {
+        cout << setw(width) << trajectory_sd.s_[i] 
+             << setw(width) << trajectory_sd.d_[i] 
+             << setw(width) << velocity[i] 
+             << setw(width) << acceleration[i] << endl;
+    }*/
+
+    return max_accel;
 }
 
 
