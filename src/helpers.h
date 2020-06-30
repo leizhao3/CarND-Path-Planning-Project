@@ -296,125 +296,10 @@ void car2map(
     return;
   }
 
-/**
- * define a path made up of (x,y) points that the car will visit
- * sequentially every .02 seconds
- * Method: 
- * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
- * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
- * @return next_path_x_ref & next_path_y_ref in MAP coordinate
- */
-void generateTraj(vector<double> &next_path_x_ref, vector<double> &next_path_y_ref, 
-  vector<double> &previous_path_x, vector<double> &previous_path_y, 
-  double car_x, double car_y, double car_yaw, double car_s, double ref_vel, 
-  int target_lane, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y) {
 
-  vector<double> spline_x; //point x for spline generation
-  vector<double> spline_y; //point x for spline generation
-
-  double ref_x, ref_y, ref_yaw;
-  double ref_x_prev, ref_y_prev;
-
-  int prev_size = previous_path_x.size();
-
-  //if previous size is almost empty, use the car as starting reference
-  if(prev_size < 2) {
-    ref_x = car_x; 
-    ref_y = car_y;
-    ref_yaw = deg2rad(car_yaw);
-
-    //use two points that make the path tangent to the car. dist=1
-    ref_x_prev = car_x - cos(car_yaw); 
-    ref_y_prev = car_y - sin(car_yaw); 
-
-  } else {
-    //use last two points from previous path to create future path
-    ref_x = previous_path_x[prev_size-1];
-    ref_y = previous_path_y[prev_size-1];
-
-    ref_x_prev = previous_path_x[prev_size-2];
-    ref_y_prev = previous_path_y[prev_size-2];
-    ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
-
-  }
-
-  spline_x.push_back(ref_x_prev);
-  spline_x.push_back(ref_x);
-
-  spline_y.push_back(ref_y_prev);
-  spline_y.push_back(ref_y);
-
-  //In Frenet add evenly 30m space point ahead of the car reference
-  vector<double> next_wp0 = getXY(car_s+30,2+4*target_lane,maps_s, maps_x, maps_y);
-  vector<double> next_wp1 = getXY(car_s+60,2+4*target_lane,maps_s, maps_x, maps_y);
-  vector<double> next_wp2 = getXY(car_s+90,2+4*target_lane,maps_s, maps_x, maps_y);
-
-  spline_x.push_back(next_wp0[0]);
-  spline_x.push_back(next_wp1[0]);
-  spline_x.push_back(next_wp2[0]);
-
-  spline_y.push_back(next_wp0[1]);
-  spline_y.push_back(next_wp1[1]);
-  spline_y.push_back(next_wp2[1]);
-
-  // convert map coordiante to vehicle coordinate
-  map2car(spline_x, spline_y, ref_x, ref_y, ref_yaw);
-
-  // create a spline
-  tk::spline traj;
-  traj.set_points(spline_x, spline_y);
-  
-  double target_x = 30.0;
-  double target_y = traj(target_x);
-  double target_dist = sqrt(target_x*target_x+target_y*target_y);
-  double N = target_dist/(0.02*ref_vel/2.24);
-    //Number of point within target_x.
-    //0.02 is from the car updates every 0.02 second
-    //2.24 convert MPH to m/s
-  double x_add_on = target_x/N; //evenly spacing within target_x
-
-  double x_point, y_point;
-  x_point = 0;
-
-  int next_size = 50 - prev_size; 
-    //How many point we want to generate in next path beside the point in previous path
-  
-  for(int i=0; i<next_size; i++) {
-    x_point += x_add_on;
-    y_point = traj(x_point);
-
-    next_path_x_ref.push_back(x_point);
-    next_path_y_ref.push_back(y_point);
-
-  }
-
-  // convert CAR coordiante to MAP coordinate
-  car2map(next_path_x_ref, next_path_y_ref, ref_x, ref_y, ref_yaw);
-
-  return;
-}
-
-
-//find all potential lane
-vector<int> findLane(int lane) {
-    vector<int> potential_lane;
-
-    if(lane == 0) {
-        potential_lane.push_back(lane+1);
-    } 
-    else if (lane == 1) {
-        potential_lane.push_back(lane-1);
-        potential_lane.push_back(lane+1);
-    } 
-    else if (lane == 2) {
-        potential_lane.push_back(lane-1);
-    }
-    potential_lane.push_back(lane);
-
-    return potential_lane;
-}
 
 /**
+
  * A function that returns a value between 0 and 1 for x in the range [0, infinity] and 
  *                                        -1 to 1 for x in the range [-infinity, infinity].
 
@@ -422,49 +307,6 @@ vector<int> findLane(int lane) {
  */
 double logistic(double x) {
   return 2.0 / (1 + exp(-x)) - 1.0;
-}
-
-/**
- * Prediction other vehicles [s, s_dot, s_double_dot, d, d_dot, d_double_dot] based on sensor fusion data.
- * Assumption:
- *    s_double_dot = 0
- *    d_dot = 0
- *    d_double_dot = 0
- * @param sensor_fusion Sensor Fusion Data, a 2d vector of all other cars on the same side of the road.
- *                      Accessed via [ID][@param]
-  * @param ID car's unique ID
-  * @param x [meter] car's x position in map coordinates
-  * @param y [meter] car's y position in map coordinates
-  * @param vx [m/s] car's x velocity
-  * @param vy [m/s] car's y velocity
-  * @param s [meter] car's s position in frenet coordinates
-  * @param d [meter] car's d position in frenet coordinates. 
- * @return [ID][s, s_dot, s_double_dot, d, d_dot, d_double_dot]
-       
- */
-vector<vector<double>> predictionCars(vector<vector<double>> sensor_fusion) {
-  vector<vector<double>> prediction;
-
-  for(int i=0; i<sensor_fusion.size(); i++) {
-    
-    double s = sensor_fusion[i][4];
-    double vx = sensor_fusion[i][2];
-    double vy = sensor_fusion[i][3];
-    double s_dot = sqrt(vx*vx + vy*vy);
-    double s_double_dot = 0;
-
-    double d = sensor_fusion[i][5];
-    double d_dot = 0;
-    double d_double_dot = 0;
-    
-
-
-
-    prediction.push_back({s,s_dot,s_double_dot, d,d_dot,d_double_dot});
-    
-  }
-
-  return prediction;
 }
 
 
@@ -479,7 +321,7 @@ vector<vector<double>> predictionCars(vector<vector<double>> sensor_fusion) {
  */
 double nearestDist2SingleCar(
   vector<double> &next_path_x, vector<double> &next_path_y, 
-  vector<double> &sensor_fusion_single, double ref_vel) {
+  vector<double> &sensor_fusion_single, double ref_vel, int prev_size) {
     
     double closest = 999999;
 
@@ -490,6 +332,11 @@ double nearestDist2SingleCar(
     double y = sensor_fusion_single[2];
     double y_dot = sensor_fusion_single[4];
     double y_double_dot = 0;
+
+    double T = prev_size*0.02; //update every 0.02s.
+    //the location of the sensed car @ time = T
+    x += x_dot*T + x_double_dot*T*T; 
+    y += y_dot*T + y_double_dot*T*T;
 
     for(int i=0; i<(next_path_x.size()-1); i++) {
       double dist = distance(next_path_x[i], next_path_y[i],next_path_x[i+1], next_path_y[i+1]);
@@ -530,11 +377,11 @@ double nearestDist2SingleCar(
  */
 double nearestDist2Cars(
   vector<double> &next_path_x, vector<double> &next_path_y, 
-  vector<vector<double>> &sensor_fusion, double ref_vel) {
+  vector<vector<double>> &sensor_fusion, double ref_vel, int prev_size) {
     
     double closest = 999999;
     for(int i=0; i<sensor_fusion.size(); i++) {
-      double dist = nearestDist2SingleCar(next_path_x, next_path_y, sensor_fusion[i], ref_vel);
+      double dist = nearestDist2SingleCar(next_path_x, next_path_y, sensor_fusion[i], ref_vel, prev_size);
       //cout << "Vehicle ID = " << i << endl;
       //cout << "dist = " << dist << endl;
 
@@ -558,7 +405,7 @@ double nearestDist2Cars(
  */
 double nearestDist2SingleCar_front(
   vector<double> &next_path_s, vector<double> &next_path_d, 
-  vector<double> &sensor_fusion_single, double ref_vel) {
+  vector<double> &sensor_fusion_single, double ref_vel, int prev_size) {
     
     double closest = 999999;
 
@@ -570,13 +417,20 @@ double nearestDist2SingleCar_front(
 
     double d = sensor_fusion_single[6];
 
+    double T = prev_size*0.02; //update every 0.02s.
+    //the location of the sensed car @ time = T
+    s += s_dot*T + s_double_dot*T*T; 
+    //d = d;
+
     for(int i=0; i<(next_path_s.size()-1); i++) {
       double dist = distance(next_path_s[i], next_path_d[i],next_path_s[i+1], next_path_d[i+1]);
         //get distance from the the current point of analysis to the next point of analysis in next_path.
       double dT = dist/(ref_vel/2.24); 
         //the time needed for ego vehicle to get to the next point
         //ref_vel/2.24 convert MPH to m/s
+      
       s += s_dot*dT + s_double_dot*dT*dT; //the s of the other vehicle in lane
+      //d = d;
 
       double dist2ego_front = fabs(s-next_path_s[i]);
 
@@ -611,12 +465,12 @@ double nearestDist2SingleCar_front(
  */
 double nearestDist2Cars_front(
   vector<double> &next_path_s, vector<double> &next_path_d, 
-  vector<vector<double>> &sensor_fusion, double ref_vel) {
+  vector<vector<double>> &sensor_fusion, double ref_vel, int prev_size) {
     
     double closest = 999999;
     for(int i=0; i<sensor_fusion.size(); i++) {
 
-      double dist = nearestDist2SingleCar_front(next_path_s, next_path_d, sensor_fusion[i], ref_vel);
+      double dist = nearestDist2SingleCar_front(next_path_s, next_path_d, sensor_fusion[i], ref_vel, prev_size);
 
       if(dist<closest) {
         closest = dist;

@@ -21,13 +21,13 @@ using std::setw;
 //WEIGHTED_COST_FUNCTIONS
 struct WEIGHTED_COST_FUNCTIONS {
     double max_speed_cost = 10000;
-    double slow_speed_cost = 100;
-    double time_diff_cost = 500;
+    double slow_speed_cost = 500;
+    double time_diff_cost = 100;
     double max_LC_time_cost = 100;
     //double max_jerk_cost = 10000;
     //double total_jerk_cost = 1000;
     double side_collision_cost = 10000;
-    double side_buffer_cost = 1000;
+    double side_buffer_cost = 500;
     double front_collision_cost = 10000;
     double front_buffer_cost = 1000;
     //double max_accel_cost = 10000;
@@ -58,7 +58,7 @@ class Cost {
     public:
         //contructor 
         Cost(Trajectory &trajectory, TrajectorySD &trajectory_sd, Vehicle &vehicle, vector<vector<double>> &sensor_fusion, 
-             int lane, double ref_vel, string state) {
+             int lane, double ref_vel, string state, int prev_size) {
             next_path_x_ = trajectory.x_;//in MAP coordinate
             next_path_y_ = trajectory.y_;//in MAP coordinate
             next_path_s_ = trajectory_sd.s_;//in FRENET coordinate
@@ -67,6 +67,7 @@ class Cost {
             ref_vel_ = ref_vel;
             lane_ = lane;
             state_ = state;
+            prev_size_ = prev_size;
             //potential_lane_ = potential_lane;
         }
 
@@ -102,6 +103,7 @@ class Cost {
         int lane_;
         string state_;
         //int potential_lane_;
+        int prev_size_;
 
 
         //CONSTANTS
@@ -193,17 +195,13 @@ double Cost::calculateCost(int verbose) {
 double Cost::maxSpeedCost() {
 
     double cost;
-
     if(ref_vel_>SPEED_LIMIT) {
-        cost = 1;
+        return 1;
     }
     else {
-        cost = 0;
+        return 0;
     }
 
-    //cout << "max_speed_cost = " << cost << endl;
-
-    return cost;
 }
 
 double Cost::slowSpeedCost() {
@@ -225,7 +223,7 @@ double Cost::slowSpeedCost() {
 
 double Cost::sideCollisionCost() {
 
-    double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_);
+    double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_, prev_size_);
 
     if(nearest < VEHICLE_WIDTH) {
         return 1.0;
@@ -237,14 +235,14 @@ double Cost::sideCollisionCost() {
 
 double Cost::sideBufferCost() {
 
-    double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_);
+    double nearest = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_, prev_size_);
     return logistic(VEHICLE_WIDTH / nearest);
 
 }
 
 double Cost::frontCollisionCost() {
 
-    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_);
+    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_, prev_size_);
 
     if(nearest_front < VEHICLE_LENTH) {
         return 1.0;
@@ -256,7 +254,7 @@ double Cost::frontCollisionCost() {
 
 double Cost::frontBufferCost() {
 
-    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_);
+    double nearest_front = nearestDist2Cars_front(next_path_s_, next_path_d_, sensor_fusion_, ref_vel_, prev_size_);
     return logistic(VEHICLE_LENTH / nearest_front);
     
 }

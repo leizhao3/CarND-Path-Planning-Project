@@ -206,13 +206,14 @@ int main() {
             if(deceleration_dist<0) {
               cout << "deceleration_dist<0, larger deceleration is needed" << endl;
             }
-          } else {
+          } 
+          /*
+          else {
 
             if (ref_vel < 49.5) {
               ref_vel += .224;
             }
-
-          }
+          }*/
 
 
           /*---------------Use points in previous path to generate smoother path---------------*/
@@ -229,69 +230,7 @@ int main() {
           next_path = path_planning.chooseNextState();
           path_planning.statusUpdate(lane, ref_vel, state);
 
-          /*
-          if(too_close) {
-            next_path = path_planning.chooseNextState();
-            path_planning.statusUpdate(lane, ref_vel, state);
-          } 
-          else {
-            next_path = path_planning.generateTrajectory(lane, ref_vel);
-          }*/
           cout << "state after updated = " << state << endl;
-        
-
-
-          /*
-          generateTraj(next_path_x, next_path_y,
-                    previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
-                    lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);*/
-
-          /*
-          if(too_close) {
-
-            cout << "\n\n\n====================================================================" << endl;
-            cout << "doing path planning......." << endl;
-            double cost_min = 10000;
-
-            vector<int> potential_lane;
-            potential_lane = findLane(lane);
-
-            for(int i=0; i<potential_lane.size(); i++) {
-              cout << "--------------------------------------------------" << endl;
-              cout << "current @ lane " << lane << endl;
-              cout << "analyize potential_lane " << potential_lane[i] << endl;
-
-              vector<double> next_path_x_ref;
-              vector<double> next_path_y_ref;
-
-              generateTraj(next_path_x_ref, next_path_y_ref,
-                  previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
-                  potential_lane[i], map_waypoints_s, map_waypoints_x, map_waypoints_y);
-              
-              //double cost = calculate_cost(next_path_x_ref, next_path_y_ref);
-              Cost cost = Cost(next_path_x_ref, next_path_y_ref, ref_vel, sensor_fusion, lane, potential_lane[i]);
-
-              //find the min cost trajectory
-              double cost_temp = cost.calculateCost(1);
-              cout << "cost_temp = " << cost_temp << endl;
-              if(cost_temp < cost_min) {
-                cout << "\nget smaller cost " << cost_temp << endl;
-                cout << "current @ lane " << lane << endl;
-                cout << "going to @ lane " << potential_lane[i] << endl;
-                
-                cost_min = cost_temp;
-
-                next_path_x = next_path_x_ref;
-                next_path_y = next_path_y_ref;
-              }
-            }
-          } else {
-            generateTraj(next_path_x, next_path_y,
-                previous_path_x, previous_path_y, car_x, car_y, car_yaw, car_s, ref_vel,  
-                lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          }
-          */
-
 
           int prev_size = previous_path_x.size();
           int next_size = 50 - prev_size; 
