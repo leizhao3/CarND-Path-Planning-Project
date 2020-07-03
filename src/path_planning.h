@@ -11,6 +11,8 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <stdio.h> 
+#include <stdlib.h> 
 
 // for convenience
 using std::string;
@@ -26,7 +28,7 @@ class PathPlanning {
         PathPlanning(
             Vehicle &ego_vehicle, Trajectory &previous_path, 
             vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints,
-            int lane, double ref_vel, string state, vector<double> &end_path);
+            int lane, double ref_vel, string state, vector<double> &end_path, int LC_idx);
 
         // Destructor
         ~PathPlanning();
@@ -60,9 +62,13 @@ class PathPlanning {
         double ref_vel_;
         string state_;
         vector<double> end_path_;
+        int LC_idx_;
+        double s_gap_min_;
 
         const double MAX_ACCEL = 10; //[m/s^2], the maximum acceleration
         const double MAX_JERK = 10; //[m/s^3], the maximum jerk
+        const double SAFE_DIST = 30; //[meter]
+        //const int LC_TIMEGAP = 5; //[second], the min time gap between the lane change
    
 };
 
@@ -70,7 +76,7 @@ class PathPlanning {
 PathPlanning::PathPlanning(
     Vehicle &ego_vehicle, Trajectory &previous_path, 
     vector<vector<double>> &sensor_fusion, MapWaypoints &map_waypoints, 
-    int lane, double ref_vel, string state, vector<double> &end_path) {
+    int lane, double ref_vel, string state, vector<double> &end_path, int LC_idx) {
 
     ego_vehicle_ = ego_vehicle;
     previous_path_ = previous_path;
@@ -80,43 +86,37 @@ PathPlanning::PathPlanning(
     ref_vel_ = ref_vel;
     state_ = state;
     end_path_ = end_path;
-   
+    LC_idx_ = LC_idx;
 
+
+    //find the gap to the sensed car in front of us.
+    double check_s_min = 99999;
+    for(int i=0; i<sensor_fusion_.size(); i++) {
+
+        double check_d = sensor_fusion_[i][6];
+
+        //Check only the vehicle in that lane
+        if(check_d<(2+4*lane_+2) && (check_d>(2+4*lane_-2))) {
+
+            double check_s = sensor_fusion_[i][5];
+
+            double dist_s = fabs(check_s - ego_vehicle_.car_s_);
+
+            if(dist_s < check_s_min) {
+                check_s_min = dist_s;
+            }
+        }
+    }
+    
+    s_gap_min_ = check_s_min;
 }
 
 PathPlanning::~PathPlanning() {};
 
 Trajectory PathPlanning::chooseNextState() {
     /**
-     * Here you can implement the transition_function code from the Behavior 
-     *   Planning Pseudocode classroom concept.
-     *
-     * @param predictions predictions map, a map of vehicle id keys with predicted
-     *   vehicle trajectories as values. Trajectories are a vector of Vehicle 
-     *   objects representing the vehicle at the current timestep and one timestep
-     *   in the future.
      * @return The best (lowest cost) trajectory corresponding to the next ego 
      *   vehicle state.
-     *
-     * Functions that will be useful:
-     * 1. successor_states - Uses the current state to return a vector of possible
-     *    successor states for the finite state machine.
-     * vector<string> Vehicle::successor_states()
-     * 
-     * 2. generate_trajectory - Returns a vector of Vehicle objects representing 
-     *    a vehicle trajectory, given a state and predictions. Note that 
-     *    trajectory vectors might have size 0 if no possible trajectory exists 
-     *    for the state. 
-     * vector<Vehicle> Vehicle::generate_trajectory(string state, 
-     *                                         map<int, vector<Vehicle>> &predictions)
-     * 
-     * 3. calculate_cost - Included from cost.cpp, computes the cost for a trajectory.
-     * float calculate_cost(const Vehicle &vehicle, 
-     *                  const map<int, vector<Vehicle>> &predictions, 
-     *                  const vector<Vehicle> &trajectory) {
-     * // Sum weighted cost functions to get total cost for trajectory.
-     *
-     * TODO: Your solution here.
      */
 
     Trajectory next_path; //output parameter
@@ -132,6 +132,7 @@ Trajectory PathPlanning::chooseNextState() {
         //How many point we want to generate in next path beside the point in previous path
 
     cout << "=====================================PATH PLANNING=====================================" << endl;
+    cout << "s_gap_min_ = " << s_gap_min_ << endl;
 
     for(int i=0; i<states.size(); i++) {
         int ref_lane = lane_;
@@ -144,38 +145,10 @@ Trajectory PathPlanning::chooseNextState() {
         else if (states[i].compare("LCL") == 0) {
             ref_lane -= 1; //minus 1 lane
             ref_vel = findRefVel(ref_lane);
-            
-            /*
-            double max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
-            int iteration = 0;
-            while(max_accel > MAX_ACCEL) {
-                ref_vel -= 0.5;
-                ref_vel = std::max(ref_vel, 0.001); //avoid negative speed
-                max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
-                iteration += 1;
-
-                cout << "iteration = " << iteration << endl;
-                cout << "ref_vel = " << ref_vel << endl;
-                cout << "max_accel = " << max_accel << endl;
-            }*/
         }
         else if (states[i].compare("LCR") == 0) {
             ref_lane += 1; // add 1 lane
             ref_vel = findRefVel(ref_lane);
-            
-            /*
-            double max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
-            int iteration = 0;
-            while(max_accel > MAX_ACCEL) {
-                ref_vel -= 0.5;
-                ref_vel = std::max(ref_vel, 0.001); //avoid negative speed
-                max_accel = getMaxAccel_T(ref_lane, ref_vel, states[i]);
-                iteration += 1;
-
-                cout << "iteration = " << iteration << endl;
-                cout << "ref_vel = " << ref_vel << endl;
-                cout << "max_accel = " << max_accel << endl;
-            }*/
         }
         else if (states[i].compare("PLCL") == 0) {
             //no change on the ref_lane
@@ -187,29 +160,11 @@ Trajectory PathPlanning::chooseNextState() {
         }
 
         Trajectory trajectory = generateTrajectory(ref_lane, ref_vel, states[i]);
-        
-        int width = 15; 
-        
-        //cout << "trajectory" << trajectory.x_.size() << endl;
-        /*
-        cout << setw(width) << "x" << setw(width) << "y" << endl;
-        for(int i=0; i<trajectory.x_.size(); i++) {
-            cout << setw(width) << trajectory.x_[i] << setw(width) << trajectory.y_[i] << endl;
-        }
-        cout << endl;*/
 
         TrajectorySD trajectory_sd = getFrenet_traj(trajectory, map_waypoints_, ego_vehicle_, end_path_);
-        
-        //cout << "trajectory_sd.size() = " << trajectory_sd.s_.size() << endl;
-        /*
-        cout << setw(width) << "s" << setw(width) << "d" << endl;
-        for(int i=0; i<trajectory_sd.s_.size(); i++) {
-            cout << setw(width) << trajectory_sd.s_[i] << setw(width) << trajectory_sd.d_[i] << endl;
-        }
-        cout << endl;*/
 
         Cost cost = Cost(trajectory, trajectory_sd, ego_vehicle_, 
-                        sensor_fusion_, ref_lane, ref_vel, states[i], prev_size);
+                        sensor_fusion_, ref_lane, ref_vel, states[i], prev_size, LC_idx_);
         cout << "---------" << states[i] << "---------" << endl;
         double cost_temp = cost.calculateCost(1);
 
@@ -253,21 +208,19 @@ Trajectory PathPlanning::chooseNextState() {
     return next_path;
 }
 
-vector<string> PathPlanning::successorStates() {
-    // Provides the possible next states given the current state for the FSM 
-    //   discussed in the course, with the exception that lane changes happen 
-    //   instantaneously, so LCL and LCR can only transition back to KL.
+vector<string> PathPlanning::successorStates() {    
     /**
-    * @return only return viable states
+    * Provides the possible next states given the current state for the Finite State Machine
+    * @return viable states
     */
     vector<string> states;
     states.push_back("KL");
 
-    //ONLY "KL" when ref_vel_ < 25 MPH 
-    if(ref_vel_ < 25) {
+    //ONLY "KL" when the ego car is at the beginning
+    //NOT allow for "PLCL" and "PLCR" when s_gap_min_ is smaller than SAFE_DIST-10 --> Only "KL"
+    if ((ego_vehicle_.car_s_<200) || (s_gap_min_<(SAFE_DIST-10))) {
         return states;
     } else {
-        //state = the current state of the vehicle. defined in the vehicle class.
         if(state_.compare("KL") == 0) {
             if(lane_ == 0) {
                 states.push_back("PLCR");
@@ -279,51 +232,40 @@ vector<string> PathPlanning::successorStates() {
             else if (lane_ == 2) {
                 states.push_back("PLCL");
             }
-        } else if (state_.compare("PLCL") == 0) {
+        } 
+        else if (state_.compare("PLCL") == 0) {
             if (lane_ == 1 || lane_ == 2) {
-            states.push_back("PLCL");
-            states.push_back("LCL");
+                states.push_back("PLCL");
+                states.push_back("LCL");
             }
-        } else if (state_.compare("PLCR") == 0) {
+        } 
+        else if (state_.compare("PLCR") == 0) {
             if (lane_ == 0 || lane_ == 1) {
-            states.push_back("PLCR");
-            states.push_back("LCR");
+                states.push_back("PLCR");
+                states.push_back("LCR");
             }
         }
     }
-
-    // If state is "LCL" or "LCR", then just return "KL"
     return states;
 }
 
-/**
- * find the target vehicle to follow & match ego vehicle to that speed. 
- * Follow the last vehicle on the lane specified. If there is no vehicle, no change on ref_vel.
- */
+
 double PathPlanning::findRefVel(int ref_lane) {
+    /**
+     * KL: find the target vehicle to follow & match ego vehicle to that speed. 
+     */
 
     double ref_vel_temp = ref_vel_;
     double check_s_min = 100000;
+    double dist_s = 0;
     bool find_target_vehicle = false;
     double target_vehicle_vel = 0; //[m/s]
+    double target_vehicle_s = 1000000;
+    double s_gap; 
+    string type;
 
-    //find the last vehicle on target line in sensor fusion
+    //find the vehicle on target line having the cloest s-value as ego vehicle
     for(int i=0; i<sensor_fusion_.size(); i++) {
-        //debug
-        /*
-        int width = 10;
-        cout << "current sensor fusion" << endl;
-        cout << setw(width) <<"ID"
-             << setw(width) <<"x"
-             << setw(width) <<"y"
-             << setw(width) <<"vx"
-             << setw(width) <<"vy"
-             << setw(width) <<"s"
-             << setw(width) <<"d" << endl;
-        for(int j=0; j<sensor_fusion_[i].size(); j++) {
-            cout << setw(width) << sensor_fusion_[i][j];
-        }
-        cout << endl;*/
 
         double check_d = sensor_fusion_[i][6];
 
@@ -332,59 +274,83 @@ double PathPlanning::findRefVel(int ref_lane) {
 
             double check_s = sensor_fusion_[i][5];
 
-            if((check_s<check_s_min) && (check_s>ego_vehicle_.car_s_)) {
-            
-            //make sure the target vehicle is the last vehicle on that lane but ahead of ego car
-            //if(check_s<check_s_min) {
-                
-                check_s_min = check_s;
-                find_target_vehicle = true;
+            dist_s = fabs(check_s - ego_vehicle_.car_s_);
 
-                if((check_s-ego_vehicle_.car_s_) > 30) {
-                    target_vehicle_vel = 49.5/2.24; //convert MPH to m/s
-                } else {
+            if(dist_s < check_s_min) {
+
+                check_s_min = dist_s;
+                find_target_vehicle = true;
+                target_vehicle_s = check_s;
+                s_gap = dist_s;
+
+                if(dist_s > SAFE_DIST) {
+                    target_vehicle_vel = 49.5; //[MPH]
+                } else { //dist_s <= SAFE_DIST
                     double target_vehicle_vx = sensor_fusion_[i][3];
                     double target_vehicle_vy = sensor_fusion_[i][4];
                     target_vehicle_vel = sqrt(target_vehicle_vx*target_vehicle_vx + target_vehicle_vy*target_vehicle_vy);
-                    
                 }
             }
         }
     }
 
-    target_vehicle_vel *= 2.24; //convert m/s to MPH
-    cout << "\nFINAL: target_vehicle_vel in MPH = " << target_vehicle_vel << endl;
-    //cout << "find_target_vehicle = " << find_target_vehicle << endl;
-    //cout << "ref_vel_temp before = " << ref_vel_temp << endl;
+    //debug
+    /*
+    if(!find_target_vehicle) {
+        cout << "\nNO TARGET VEHICLE FOUND in 30m in fornt of ego car" << endl;
+        cout << "s_gap = " << s_gap << endl;
+    } else {
+        cout << "\nFINAL: target_vehicle_vel = " << target_vehicle_vel << "[MPH]" << endl;
+        cout << "s_gap = " << s_gap << endl;
+    }*/
 
+    
     if(!find_target_vehicle) {
         if(ref_vel_temp < 49.5) {
             ref_vel_temp += .224; //if there is no vehicle on that lane, accelerate faster
         }
     } else {
-        if(ref_vel_temp > target_vehicle_vel) {
-            ref_vel_temp -= .2;
-            ref_vel_temp = std::max(ref_vel_temp, 0.001); //no negative speed
+        //"The target vehicle is in front of ego vehicle"
+        if (target_vehicle_s > ego_vehicle_.car_s_) {
+            //cout << "The target vehicle is in front of ego vehicle" << endl;
+            if (s_gap > SAFE_DIST) {
+                if(ref_vel_temp < 49.5) {
+                    ref_vel_temp += .224;
+                }
+            } 
+            else { // s_gap <= 30
+                if(ref_vel_temp > target_vehicle_vel-3) {
+                    ref_vel_temp -= .224*4*logistic(SAFE_DIST/s_gap);
+                    ref_vel_temp = std::max(ref_vel_temp, 0.001); 
+                } else {
+                    ref_vel_temp += .224*logistic(target_vehicle_vel/ref_vel_temp); 
+                        //reward higher target_vehicle_vel --> differentiate PLCL & PLCR
+                }
+            }
         } 
+        //The target vehicle is behind ego vehicle
         else {
-            ref_vel_temp += .2*logistic(target_vehicle_vel/ref_vel_temp); //reward higher target_vehicle_vel
+            //cout << "The target vehicle is behind ego vehicle" << endl;
+            if(ref_vel_temp < 49.5) {
+                ref_vel_temp += .224;
+            }
         }
     }
-    
+
+    //cout << "final ref_vel_temp = " << ref_vel_temp << "MPH" << endl;
 
     return ref_vel_temp;
 }
 
 
-/**
- * define a path made up of (x,y) points that the car will visit
- * sequentially every .02 seconds
- * Method: 
- * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
- * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
- * @return next_path_x_ref & next_path_y_ref in MAP coordinate
- */
 Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string ref_state) {
+    /**
+    * define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+    * Method: 
+    * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
+    * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
+    * @return next_path_x_ref & next_path_y_ref in MAP coordinate
+    */
 
     Trajectory next_path_ref; 
         //output trajectory based on current stateTrajectory next_path_ref; //output trajectory based on current state
@@ -398,7 +364,6 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string
     const vector<double> maps_s = map_waypoints_.s_;
     const vector<double> maps_x = map_waypoints_.x_;
     const vector<double> maps_y = map_waypoints_.y_;
-  
   
     vector<double> spline_x; //point x for spline generation
     vector<double> spline_y; //point x for spline generation
@@ -445,18 +410,22 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string
         next_wp0 = getXY(car_s+30,4*ref_lane,maps_s, maps_x, maps_y);
         next_wp1 = getXY(car_s+60,4*ref_lane+2,maps_s, maps_x, maps_y);
         next_wp2 = getXY(car_s+90,4*ref_lane+2,maps_s, maps_x, maps_y);
-        //next_wp0 = getXY(end_path_[0]+30,4*ref_lane-0.66,maps_s, maps_x, maps_y);
-        //next_wp1 = getXY(end_path_[0]+60,4*ref_lane+1.33,maps_s, maps_x, maps_y);
-        //next_wp2 = getXY(end_path_[0]+90,4*ref_lane+2,maps_s, maps_x, maps_y);
         
-    } else {
-        //"KL", "PLCR", "PLCL": In Frenet add evenly 30m space point ahead of the car reference
+    } 
+    else if (ref_state.compare("PLCL") == 0) {
+        next_wp0 = getXY(car_s+30,4*ref_lane+2-0.1,maps_s, maps_x, maps_y);
+        next_wp1 = getXY(car_s+60,4*ref_lane+2-0.1,maps_s, maps_x, maps_y);
+        next_wp2 = getXY(car_s+90,4*ref_lane+2-0.1,maps_s, maps_x, maps_y);
+    }
+    else if (ref_state.compare("PLCR") == 0) {
+        next_wp0 = getXY(car_s+30,4*ref_lane+2+0.1,maps_s, maps_x, maps_y);
+        next_wp1 = getXY(car_s+60,4*ref_lane+2+0.1,maps_s, maps_x, maps_y);
+        next_wp2 = getXY(car_s+90,4*ref_lane+2+0.1,maps_s, maps_x, maps_y);
+    }
+    else if (ref_state.compare("KL") == 0) {
         next_wp0 = getXY(car_s+30,4*ref_lane+2,maps_s, maps_x, maps_y);
         next_wp1 = getXY(car_s+60,4*ref_lane+2,maps_s, maps_x, maps_y);
         next_wp2 = getXY(car_s+90,4*ref_lane+2,maps_s, maps_x, maps_y);
-        //next_wp0 = getXY(end_path_[0]+30,4*ref_lane+2,maps_s, maps_x, maps_y);
-        //next_wp1 = getXY(end_path_[0]+60,4*ref_lane+2,maps_s, maps_x, maps_y);
-        //next_wp2 = getXY(end_path_[0]+90,4*ref_lane+2,maps_s, maps_x, maps_y);
     }
 
     spline_x.push_back(next_wp0[0]);
@@ -469,13 +438,6 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string
 
     // convert map coordiante to vehicle coordinate
     map2car(spline_x, spline_y, ref_x, ref_y, ref_yaw);
-
-    /*
-    int width = 15;
-    cout << setw(width) << "spline_x" << setw(width) << "spline_y" << endl;
-    for(int i=0; i<spline_x.size(); i++) {
-        cout << setw(width) << spline_x[i] << setw(width) << spline_y[i] << endl;
-    }*/
 
     // create a spline
     tk::spline traj;
@@ -492,9 +454,6 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string
 
     double x_point, y_point;
     x_point = 0;
-
-    //int next_size = 50 - prev_size; 
-        //How many point we want to generate in next path beside the point in previous path
     
     for(int i=0; i<N; i++) {
         x_point += x_add_on;
@@ -511,8 +470,8 @@ Trajectory PathPlanning::generateTrajectory(int ref_lane, double ref_vel, string
 }
 
 
-//Pass lane, ref_vel, state to upper function. 
 void PathPlanning::statusUpdate(int &lane, double &ref_vel, string &state) {
+    //Pass lane, ref_vel, state to upper function. 
     lane = lane_;
     ref_vel = ref_vel_;
     state = state_;
@@ -550,24 +509,9 @@ double PathPlanning::getMaxAccel_T(int ref_lane, double ref_vel, string ref_stat
 
     max_accel = *std::max_element(begin(acceleration), end(acceleration));
 
-    //cout << "max_accel = " << max_accel << endl;
-
-    /*
-    int width = 15;
-    cout << setw(width) << "s" 
-         << setw(width) << "d" 
-         << setw(width) << "vel" 
-         << setw(width) << "accel" << endl;
-    for(int i=0; i<(trajectory_sd.d_.size()-2); i++) {
-        cout << setw(width) << trajectory_sd.s_[i] 
-             << setw(width) << trajectory_sd.d_[i] 
-             << setw(width) << velocity[i] 
-             << setw(width) << acceleration[i] << endl;
-    }*/
 
     return max_accel;
 }
-
 
 
 #endif  // PATH_PLANNING_H

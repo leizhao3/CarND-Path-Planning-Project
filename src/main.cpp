@@ -5,7 +5,7 @@
 #include <vector>
 #include <iomanip>
 #include <cmath>
-#include <algorithm>    // std::max
+#include <algorithm>
 
 #include "json.hpp"
 #include "spline.h"
@@ -68,10 +68,11 @@ int main() {
   double ref_vel = 0; // [mph]. 
   double target_vel = 49.5; // [mph]. The initial target speed is set slightly below speed limit.
   string state = "KL"; //"KL" or "LCL" or "LCR" or "PLCL" or "PLCL"
+  int LC_idx = 9999; // to avoid double lane change
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy, 
-               &lane,&ref_vel,&target_vel, &state]
+               &lane,&ref_vel,&target_vel, &state, &LC_idx]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     
@@ -124,8 +125,8 @@ int main() {
            * @param ID car's unique ID
            * @param x [meter] car's x position in map coordinates
            * @param y [meter] car's y position in map coordinates
-           * @param vx [m/s] car's x velocity
-           * @param vy [m/s] car's y velocity
+           * @param vx [MPH] car's x velocity
+           * @param vy [MPH] car's y velocity
            * @param s [meter] car's s position in frenet coordinates
            * @param d [meter] car's d position in frenet coordinates. 
            */
@@ -168,69 +169,25 @@ int main() {
             cout << endl;
           }*/
 
-          bool too_close = false;
-          //bool too_close_rear = false;
-          //bool too_close_left = false;
-          //bool too_close_right = false;
-          double deceleration_dist; //the distance to decelerate
+        
+          /*---------------PATH PLANNING---------------*/
 
-          //find ref_v to use
-          for(int i=0; i<sensor_fusion.size(); i++) {
-            //find the car in my lane
-            float check_d = sensor_fusion[i][6];
-            if(check_d<(lane_center_d+2) && (check_d>(lane_center_d-2))) {
-              double check_vx = sensor_fusion[i][3];
-              double check_vy = sensor_fusion[i][4];
-              double check_speed = sqrt(check_vx*check_vx + check_vy*check_vy);
-              double check_s = sensor_fusion[i][5];
-              double s_gap = check_s - car_s; //the gap between ego car to check car
-
-              if((check_s>car_s) && (s_gap<50)) {
-
-                too_close = true;
-                target_vel = check_speed; //set the target velocity to the vehicle in front of us
-                deceleration_dist = s_gap - 30; //adaptive distance. when deceleration_dist = 0, ref_vel=check_vel
-
-              }
-            }
-          }
-
-          if(too_close) {
-            if(ref_vel > (target_vel-3)) {//slightly below the target_vel
-              double deceleration = (ref_vel-target_vel)*(ref_vel-target_vel)/fabs(deceleration_dist); 
-              deceleration = std::min(2.0, deceleration); //to avoid larger acceleration
-              ref_vel -= deceleration * 0.02;
-              ref_vel = std::max(0.0001, ref_vel); //to avoid negative velocity when the velocity is small
-            }
-
-            if(deceleration_dist<0) {
-              cout << "deceleration_dist<0, larger deceleration is needed" << endl;
-            }
-          } 
-          /*
-          else {
-
-            if (ref_vel < 49.5) {
-              ref_vel += .224;
-            }
-          }*/
-
-
-          /*---------------Use points in previous path to generate smoother path---------------*/
-          /**define a path made up of (x,y) points that the car will visit
-           * sequentially every .02 seconds
-           * Method: 
-           * 1. Generate spline from previous_path(last 2 points) & next_path(s+30, s+60, s+90)
-           * 2. Generate points on the next_path from the spline up to s+30 to make total 50 points. 
-           */
-
-          PathPlanning path_planning(ego_vehicle, previous_path, sensor_fusion, map_waypoints, lane, ref_vel, state, end_path);
+          PathPlanning path_planning(
+            ego_vehicle, previous_path, sensor_fusion, map_waypoints, lane, ref_vel, state, end_path, LC_idx);
           Trajectory next_path;
 
           next_path = path_planning.chooseNextState();
           path_planning.statusUpdate(lane, ref_vel, state);
 
           cout << "state after updated = " << state << endl;
+          LC_idx += 1;
+
+          //avoid double lane change
+          if((state.compare("LCL")==0) || (state.compare("LCR")==0)) {
+            cout << "making " << state;
+            cout << "current LC_idx = " << LC_idx << ", setting it to 0" << endl;
+            LC_idx = 0;
+          }
 
           int prev_size = previous_path_x.size();
           int next_size = 50 - prev_size; 

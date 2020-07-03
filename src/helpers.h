@@ -403,9 +403,9 @@ double nearestDist2Cars(
   * @param s [meter] car's s position in frenet coordinates
   * @param d [meter] car's d position in frenet coordinates. 
  */
-double nearestDist2SingleCar_front(
+double nearestDist2SingleCar_s(
   vector<double> &next_path_s, vector<double> &next_path_d, 
-  vector<double> &sensor_fusion_single, double ref_vel, int prev_size) {
+  vector<double> &sensor_fusion_single, double ref_vel, int prev_size, string type) {
     
     double closest = 999999;
 
@@ -415,12 +415,14 @@ double nearestDist2SingleCar_front(
     double s_dot = sqrt(vx*vx+vy*vy); //assume the worst: all velocity is in s
     double s_double_dot = 0;
 
-    double d = sensor_fusion_single[6];
+    double d = sensor_fusion_single[6]; //sensed car not doing lane change
 
     double T = prev_size*0.02; //update every 0.02s.
     //the location of the sensed car @ time = T
     s += s_dot*T + s_double_dot*T*T; 
     //d = d;
+
+    //cout << "dist2ego_s in [-1.5, +1.5]  = " << endl;
 
     for(int i=0; i<(next_path_s.size()-1); i++) {
       double dist = distance(next_path_s[i], next_path_d[i],next_path_s[i+1], next_path_d[i+1]);
@@ -432,45 +434,49 @@ double nearestDist2SingleCar_front(
       s += s_dot*dT + s_double_dot*dT*dT; //the s of the other vehicle in lane
       //d = d;
 
-      double dist2ego_front = fabs(s-next_path_s[i]);
+      double dist2ego_s = closest + 1; //dist2ego_s > 0 @ all the time
+      if (type.compare("front") == 0) {
+        if (s > next_path_s[i]) {
+          dist2ego_s = s-next_path_s[i]; //the sensed car s to ego car s
+        }
+      } 
+      else if (type.compare("rear") == 0) {
+        if (next_path_s[i] > s) {
+          dist2ego_s = next_path_s[i]-s; //the ego car s to sensed car s
+        }
+      }
 
       //Only check the vehicle showing up in the range of d of ego vehicle
-      if((d>next_path_d[i]-1.5) && (d<next_path_d[i]+1.5)) {
-        if(dist2ego_front < closest) {
-          closest = dist2ego_front;
+      if((d>(next_path_d[i]-1.5)) && (d<(next_path_d[i]+1.5))) {
+
+        //cout << dist2ego_s << " ";
+
+        if(dist2ego_s < closest) {
+          closest = dist2ego_s;
           //cout << "Getting closer distance " << endl;
           //cout << "dT = " << dT << endl;
           //cout << "x\ty\tnext_path_x[i]\tnext_path_y[i]" << endl;
           //cout << x << "\t" << y << "\t" << next_path_x[i] << "\t" << next_path_y[i] << endl;
-        } 
+        }
       }
     }
-
+    //cout << endl;
     return closest;
 }
 
 
-/**
- * Calculates the closest FRONT distance to any vehicle during a trajectory.
- * 
- * Sensor Fusion Data, a 2d vector of all other cars on the same side 
- * of the road.Accessed via [ID][@param]
- * @param ID car's unique ID
- * @param x [meter] car's x position in map coordinates
- * @param y [meter] car's y position in map coordinates
- * @param vx [m/s] car's x velocity
- * @param vy [m/s] car's y velocity
- * @param s [meter] car's s position in frenet coordinates
- * @param d [meter] car's d position in frenet coordinates.         
- */
-double nearestDist2Cars_front(
+double nearestDist2Cars_s(
   vector<double> &next_path_s, vector<double> &next_path_d, 
-  vector<vector<double>> &sensor_fusion, double ref_vel, int prev_size) {
+  vector<vector<double>> &sensor_fusion, double ref_vel, int prev_size, string type) {
+    /**
+    * Calculates the closest FRONT distance to any vehicle during a trajectory.
+    *     
+    */
     
     double closest = 999999;
     for(int i=0; i<sensor_fusion.size(); i++) {
 
-      double dist = nearestDist2SingleCar_front(next_path_s, next_path_d, sensor_fusion[i], ref_vel, prev_size);
+      double dist = nearestDist2SingleCar_s(next_path_s, next_path_d, sensor_fusion[i], ref_vel, prev_size, type);
 
       if(dist<closest) {
         closest = dist;
