@@ -179,15 +179,16 @@ int main() {
           next_path = path_planning.chooseNextState();
           path_planning.statusUpdate(lane, ref_vel, state);
 
-          cout << "state after updated = " << state << endl;
+          //cout << "state after updated = " << state << endl;
           LC_idx += 1;
 
           //avoid double lane change
+          /*
           if((state.compare("LCL")==0) || (state.compare("LCR")==0)) {
             cout << "making " << state;
             cout << "current LC_idx = " << LC_idx << ", setting it to 0" << endl;
             LC_idx = 0;
-          }
+          }*/
 
           int prev_size = previous_path_x.size();
           int next_size = 50 - prev_size; 

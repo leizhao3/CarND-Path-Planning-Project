@@ -23,11 +23,11 @@ struct WEIGHTED_COST_FUNCTIONS {
     const double max_speed_cost = 10000;
     const double slow_speed_cost = 500;
     const double time_diff_cost = 150;
-    const double max_LC_time_cost = 100;
+    const double max_LC_time_cost = 10000;
     const double side_collision_cost = 10000;
-    const double side_buffer_cost = 300;
+    const double side_buffer_cost = 250;
     const double front_collision_cost = 10000;
-    const double front_buffer_cost = 1500;
+    const double front_buffer_cost = 2000;
     const double rear_collision_cost = 10000;
     const double rear_buffer_cost = 1500;
     const double double_LC_cost = 200;
@@ -54,21 +54,21 @@ class Cost {
         ~Cost() {}
 
         double calculateCost(int verbose);
-        double maxSpeedCost();
-        double slowSpeedCost();
+        double maxSpeedCost(); //cost for exceeding speed limit
+        double slowSpeedCost(); //cost for slow speed
 
-        double sideCollisionCost();
-        double sideBufferCost();
+        double sideCollisionCost(); //cost for side collision
+        double sideBufferCost(); //cost for how close the min side distance is
 
-        double frontCollisionCost();
-        double frontBufferCost();
-        double rearCollisionCost();
-        double rearBufferCost();
+        double frontCollisionCost(); //cost for front collision
+        double frontBufferCost(); //cost for how close the min front distance is
+        double rearCollisionCost(); //cost for rear collision
+        double rearBufferCost(); //cost for how close the min rear distance is
 
-        double doubleLaneChangeCost();
+        double doubleLaneChangeCost(); //cost for double lane change
 
-        double timeDiffCost();
-        double maxLCTimeCost();
+        double timeDiffCost(); //cost for how long the lane change execute
+        double maxLCTimeCost(); //cost for exceeding maximum lane change
 
 
     private:
@@ -89,7 +89,7 @@ class Cost {
         const double LC_TIMEGAP = 3; //[second], the min time gap between the lane change to previous lane change
         const double VEHICLE_RADIUS = 1.5; //[meter], model vehicle as circle to simplify buffer cost calculation
         const double VEHICLE_LENTH = 5.0; //[meter], parapmeter used for front collision
-        const double VEHICLE_WIDTH = 3.0; //[meter], parapmeter used for side collision
+        const double VEHICLE_WIDTH = 2.5; //[meter], parapmeter used for side collision
         const double EXPECTED_JERK_IN_ONE_SEC = 2; //[m/s^2]
         const double EXPECTED_ACC_IN_ONE_SEC = 1; //[m/s]
         const double SPEED_LIMIT = 50; //[MPH]
@@ -198,22 +198,17 @@ double Cost::slowSpeedCost() {
     double cost; 
 
     if(ref_vel_>SLOW_SPEED) {
-        cost = 0;
+        return 0;
     }
     else {
-        cost = logistic((SLOW_SPEED-ref_vel_) / (SPEED_LIMIT-SLOW_SPEED));
+        return logistic((SLOW_SPEED-ref_vel_) / (SPEED_LIMIT-SLOW_SPEED));
     }
-
-    //cout << "ref_vel_ = " << ref_vel_ << endl;
-    //cout << "slowSpeedCost = " << cost << endl;
-
-    return cost;
 }
 
 double Cost::sideCollisionCost() {
 
     double nearest_side = nearestDist2Cars(next_path_x_, next_path_y_, sensor_fusion_, ref_vel_, prev_size_);
-    cout << "nearest_side @ sideCollisionCost() = " << nearest_side << endl;
+    //cout << "nearest_side @ sideCollisionCost() = " << nearest_side << endl;
 
     if(nearest_side < VEHICLE_WIDTH) {
         return 1.0;
@@ -241,7 +236,7 @@ double Cost::frontCollisionCost() {
 
     double nearest_front = nearestDist2Cars_s(
         next_path_s_, next_path_d_, sensor_fusion_, ref_vel_, prev_size_, "front");
-    cout << "nearest_front @ frontCollisionCost() = " << nearest_front << endl;
+    //cout << "nearest_front @ frontCollisionCost() = " << nearest_front << endl;
 
     if(nearest_front < VEHICLE_LENTH) {
         return 1.0;
@@ -269,7 +264,7 @@ double Cost::rearCollisionCost() {
 
     double nearest_rear = nearestDist2Cars_s(
         next_path_s_, next_path_d_, sensor_fusion_, ref_vel_, prev_size_, "rear");
-    cout << "nearest_rear @ rearCollisionCost() = " << nearest_rear << endl;
+    //cout << "nearest_rear @ rearCollisionCost() = " << nearest_rear << endl;
 
     if(nearest_rear < VEHICLE_LENTH) {
         return 1.0;

@@ -131,8 +131,8 @@ Trajectory PathPlanning::chooseNextState() {
     int next_size = 50 - prev_size; 
         //How many point we want to generate in next path beside the point in previous path
 
-    cout << "=====================================PATH PLANNING=====================================" << endl;
-    cout << "s_gap_min_ = " << s_gap_min_ << endl;
+    //cout << "=====================================PATH PLANNING=====================================" << endl;
+    //cout << "s_gap_min_ = " << s_gap_min_ << endl;
 
     for(int i=0; i<states.size(); i++) {
         int ref_lane = lane_;
@@ -165,8 +165,9 @@ Trajectory PathPlanning::chooseNextState() {
 
         Cost cost = Cost(trajectory, trajectory_sd, ego_vehicle_, 
                         sensor_fusion_, ref_lane, ref_vel, states[i], prev_size, LC_idx_);
-        cout << "---------" << states[i] << "---------" << endl;
-        double cost_temp = cost.calculateCost(1);
+        //cout << "---------" << states[i] << "---------" << endl;
+        //double cost_temp = cost.calculateCost(1);
+        double cost_temp = cost.calculateCost(0);
 
         costs.push_back(cost_temp);
         ref_lane_out.push_back(ref_lane);
@@ -176,6 +177,7 @@ Trajectory PathPlanning::chooseNextState() {
     }
 
     //debug
+    /*
     int width = 15;
     cout << "------------------------SUMMARY------------------------" << endl;
     cout << setw(width) << "states is ";
@@ -187,7 +189,7 @@ Trajectory PathPlanning::chooseNextState() {
     for(int i=0; i<costs.size(); i++) {
         cout << setw(width) << costs[i];
     }
-    cout << "\n\n" << endl;
+    cout << endl;*/
 
     vector<double>::iterator best_cost = std::min_element(begin(costs), end(costs));
     int best_idx = distance(begin(costs), best_cost);
@@ -197,6 +199,8 @@ Trajectory PathPlanning::chooseNextState() {
     lane_ = ref_lane_out[best_idx];
     ref_vel_ = ref_vel_out[best_idx];
     Trajectory final_trajectory = final_trajectories[best_idx];
+    cout << "states[best_idx] = " << states[best_idx] << endl;
+    cout << "\n\n" << endl;
     
     for(int i=0; i<next_size; i++) {
 
@@ -218,7 +222,8 @@ vector<string> PathPlanning::successorStates() {
 
     //ONLY "KL" when the ego car is at the beginning
     //NOT allow for "PLCL" and "PLCR" when s_gap_min_ is smaller than SAFE_DIST-10 --> Only "KL"
-    if ((ego_vehicle_.car_s_<200) || (s_gap_min_<(SAFE_DIST-10))) {
+    //if ((ego_vehicle_.car_s_<200) || (s_gap_min_<(SAFE_DIST-10))) {
+    if (ego_vehicle_.car_s_<200) {
         return states;
     } else {
         if(state_.compare("KL") == 0) {
@@ -245,6 +250,18 @@ vector<string> PathPlanning::successorStates() {
                 states.push_back("LCR");
             }
         }
+        else if (state_.compare("LCL") == 0) {
+            if (lane_ == 1 || lane_ == 2) {
+                states.push_back("KL");
+                states.push_back("LCL");
+            }
+        } 
+        else if (state_.compare("LCR") == 0) {
+            if (lane_ == 0 || lane_ == 1) {
+                states.push_back("KL");
+                states.push_back("LCR");
+            }
+        }
     }
     return states;
 }
@@ -260,7 +277,7 @@ double PathPlanning::findRefVel(int ref_lane) {
     double dist_s = 0;
     bool find_target_vehicle = false;
     double target_vehicle_vel = 0; //[m/s]
-    double target_vehicle_s = 1000000;
+    double target_vehicle_s = 100000;
     double s_gap; 
     string type;
 
@@ -306,7 +323,7 @@ double PathPlanning::findRefVel(int ref_lane) {
 
     
     if(!find_target_vehicle) {
-        if(ref_vel_temp < 49.5) {
+        if(ref_vel_temp < 49.0) {
             ref_vel_temp += .224; //if there is no vehicle on that lane, accelerate faster
         }
     } else {
@@ -314,7 +331,7 @@ double PathPlanning::findRefVel(int ref_lane) {
         if (target_vehicle_s > ego_vehicle_.car_s_) {
             //cout << "The target vehicle is in front of ego vehicle" << endl;
             if (s_gap > SAFE_DIST) {
-                if(ref_vel_temp < 49.5) {
+                if(ref_vel_temp < 49.0) {
                     ref_vel_temp += .224;
                 }
             } 
@@ -331,8 +348,10 @@ double PathPlanning::findRefVel(int ref_lane) {
         //The target vehicle is behind ego vehicle
         else {
             //cout << "The target vehicle is behind ego vehicle" << endl;
-            if(ref_vel_temp < 49.5) {
-                ref_vel_temp += .224;
+            if (s_gap < SAFE_DIST) {
+                if(ref_vel_temp < 49.5) {
+                    ref_vel_temp += .224;
+                }
             }
         }
     }

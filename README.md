@@ -1,5 +1,45 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
+
+## Model Documentation
+### Front Collision Prevention (PathPlanning::findRefVel)
+* when the front vehicle is within 30 meter of the ego vehicle --> gradually decrease the speed to the target vehicle speed - 3 MPH (so that it could increase the gap)
+
+### Rear Collision Prevention (PathPlanning::findRefVel)
+* when there is a vehicle within 30 meter of the ego vehicle --> gradually increase the speed
+
+### Lane Change Strategy
+* Utilize Finite State Machine including 
+  * "KL" = Keep Lane --> "KL", "PLCL", "PLCR"
+  * "PLCL" = Potential Lane Change Left --> "KL", "PLCL", "LCL"
+  * "LCL" = Lane Change Left --> "KL"
+  * "PLCR" = Potential Lane Change Right --> "KL", "PLCL", "LCL"
+  * "LCL" = Lane Change Right --> "KL"
+* Calculate the cost fo each vehicle state, and pick the state and it's respective trajectory to attach to previous path.
+
+### Cost Function
+* maxSpeedCost()
+  * cost for exceeding speed limit
+* slowSpeedCost()
+  * cost for slow speed
+* sideCollisionCost()
+  * cost for side collision
+* sideBufferCost();
+  * cost for how close the min side distance is
+* frontCollisionCost(); 
+  * cost for front collision
+* frontBufferCost(); 
+  * cost for how close the min front distance is
+* rearCollisionCost(); 
+  * cost for rear collision
+* rearBufferCost(); 
+  * cost for how close the min rear distance is
+* doubleLaneChangeCost(); 
+  *  cost for double lane change
+* timeDiffCost(); 
+  * cost for how long the lane change execute
+* maxLCTimeCost(); 
+  * cost for exceeding maximum lane change
    
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
@@ -139,19 +179,6 @@ that's just a guess.
 
 One last note here: regardless of the IDE used, every submitted project must
 still be compilable with cmake and make./
-
-## Model Documentation
-### Front Collision Prevention
-* when the front vehicle is within 45 meter of the ego vehicle --> gradually decrease the speed to the front vehicle
-* when there is front vehicle within 30 meter of the ego vehicle --> the velocity has to been the same
-
-
-### Side Collision Prevention
-
-
-### Lane Change Strategy
-* when the front vehicle's speed is < 45 MPH + when it is safe to make lane change
-* change the lane
 
 ## Mac Trouble Shooting
 ### Error: 
